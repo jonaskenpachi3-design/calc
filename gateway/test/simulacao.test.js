@@ -218,3 +218,18 @@ test('lote: rejeita regime inválido, lote vazio e lote grande demais', async ()
   assert.equal((await enviar({ regime: 'regime-normal', operacoes: [] })).status, 400);
   assert.equal((await enviar({ regime: 'regime-normal', operacoes: new Array(201).fill({}) })).status, 400);
 });
+
+test('Simples: aliquotas por anexo (itens de atividades diferentes)', () => {
+  const op = montarSimples({
+    data: '2027-03-15', documento: 'nfe',
+    aliquotas: { porAnexo: { I: { cbs: '1,1612', ibs: '0,0129' }, II: { cbs: 2, ibs: 0.03 } } },
+    itens: [
+      { tipo: 'produto', codigo: '22030000', atividade: '01', classificacao: '000001', valor: 100 },
+      { tipo: 'produto', codigo: '22030000', atividade: '02', classificacao: '000001', valor: 100 },
+    ],
+  });
+  assert.deepEqual(op.aliquotasEfetivas.anexoI, { pCBSSN: '1.1612', pIBSSN: '0.0129' });
+  assert.deepEqual(op.aliquotasEfetivas.anexoII, { pCBSSN: '2.0000', pIBSSN: '0.0300' });
+  assert.throws(() => montarSimples({ data: '2027-03-15', documento: 'nfe', aliquotas: { porAnexo: {} },
+    itens: [{ tipo: 'produto', codigo: '22030000', atividade: '01', classificacao: '000001', valor: 1 }] }), /Informe as alíquotas/);
+});

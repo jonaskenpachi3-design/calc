@@ -271,11 +271,7 @@
 
           <div class="so-simples" id="bloco-simples">
             <div class="msg warn small">A alíquota efetiva do Simples Nacional é calculada pela Receita a partir do seu faturamento dos últimos 12 meses. Informe abaixo os valores que constam no seu extrato do Simples (PGDAS-D) ou que seu contador passar.</div>
-            <div class="grid">
-              <div><label for="f-anexo">Anexo do Simples Nacional</label><select id="f-anexo"><option value="I">Anexo I – Comércio</option><option value="II">Anexo II – Indústria</option><option value="III">Anexo III – Serviços</option><option value="IV">Anexo IV – Serviços</option><option value="V">Anexo V – Serviços</option></select></div>
-              <div><label for="f-cbs">Alíquota efetiva de CBS (%)<span class="hint">Exemplo: 1,1612</span></label><input id="f-cbs" inputmode="decimal" placeholder="0,0000"></div>
-              <div><label for="f-ibs">Alíquota efetiva de IBS (%)<span class="hint">Exemplo: 0,0129</span></label><input id="f-ibs" inputmode="decimal" placeholder="0,0000"></div>
-            </div>
+            <div id="bloco-aliquotas"></div>
             <div class="row" style="margin-bottom:14px">
               <label style="font-weight:400"><input type="checkbox" id="f-sublimite" style="width:auto;min-height:0"> Ultrapassei o sublimite de receita</label>
               <label style="font-weight:400"><input type="checkbox" id="f-fatorr" style="width:auto;min-height:0"> Meu fator “r” é 28% ou mais (só para a atividade 09)</label>
@@ -541,8 +537,8 @@ function desenharItens() {
     ];
     const linha2 = [campo('Classificação tributária', 'Como esse item é tratado pela lei. Em caso de dúvida, pergunte ao seu contador.', cls, id('cls'))];
     if (regime === 'simples-nacional') {
-      const ats = (cache.atividades || []).map((a) => el('option', { value: a.codigo, selected: it.atividade === a.codigo }, `${a.codigo} – ${a.descricao}`.slice(0, 120)));
-      linha2.push(campo('Atividade no Simples Nacional', null, el('select', { id: id('ativ'), onchange: (e) => { it.atividade = e.target.value; } },
+      const ats = (cache.atividades || []).map((a) => el('option', { value: a.codigo, selected: it.atividade === a.codigo }, `${a.codigo} – ${a.descricao}${a.rotuloCurtoAnexo ? ' (Anexo ' + a.rotuloCurtoAnexo + ')' : ''}`.slice(0, 140)));
+      linha2.push(campo('Atividade no Simples Nacional', 'O anexo do Simples é definido pela atividade', el('select', { id: id('ativ'), onchange: (e) => { it.atividade = e.target.value; desenharAliquotas(); } },
         el('option', { value: '' }, ats.length ? 'Escolha a atividade' : 'Lista indisponível'), ats), id('ativ')));
     }
     alvo.append(el('div', { class: 'item' },
@@ -551,7 +547,32 @@ function desenharItens() {
       el('div', { class: 'grid' }, linha1), el('div', { class: 'grid' }, linha2)));
   });
   $('add-item').hidden = servicoFixo;
+  desenharAliquotas();
 }
+
+/* Alíquotas efetivas do Simples: uma linha por anexo usado pelas atividades escolhidas. */
+const taxas = {};
+function anexoDaAtividade(cod) {
+  const a = (cache.atividades || []).find((x) => x.codigo === cod);
+  if (!a) return null;
+  return ($('f-fatorr').checked && a.anexoComFatorR) ? a.anexoComFatorR : (a.anexoSemFatorR || null);
+}
+function anexosNecessarios() {
+  return [...new Set(itens.map((it) => anexoDaAtividade(it.atividade)).filter(Boolean))].sort();
+}
+function desenharAliquotas() {
+  const alvo = $('bloco-aliquotas'); if (!alvo) return; limpar(alvo);
+  if (regime !== 'simples-nacional') return;
+  const anexos = anexosNecessarios();
+  if (!anexos.length) { alvo.append(el('p', { class: 'mut small' }, 'Escolha a atividade de cada item para informar as alíquotas efetivas do anexo correspondente.')); return; }
+  for (const a of anexos) {
+    taxas[a] = taxas[a] || { cbs: '', ibs: '' };
+    alvo.append(el('div', { class: 'grid' },
+      campo(`Alíquota efetiva de CBS (%) — Anexo ${a}`, 'Exemplo: 1,1612', el('input', { id: `r-${a}-cbs`, inputmode: 'decimal', placeholder: '0,0000', value: taxas[a].cbs, oninput: (e) => { taxas[a].cbs = e.target.value; } }), `r-${a}-cbs`),
+      campo(`Alíquota efetiva de IBS (%) — Anexo ${a}`, 'Exemplo: 0,0129', el('input', { id: `r-${a}-ibs`, inputmode: 'decimal', placeholder: '0,0000', value: taxas[a].ibs, oninput: (e) => { taxas[a].ibs = e.target.value; } }), `r-${a}-ibs`)));
+  }
+}
+$('f-fatorr').onchange = () => desenharAliquotas();
 $('add-item').onclick = () => { novoItem(); desenharItens(); };
 
 function montarEntrada() {
@@ -559,7 +580,7 @@ function montarEntrada() {
   if (regime === 'regime-normal') return { ...base, uf: $('f-uf').value, municipio: $('f-mun').value };
   return {
     ...base, documento: $('f-doc').value,
-    aliquotas: { anexo: $('f-anexo').value, cbs: $('f-cbs').value, ibs: $('f-ibs').value, impedimentoSublimite: $('f-sublimite').checked, fatorR: $('f-fatorr').checked ? true : undefined },
+    aliquotas: { porAnexo: Object.fromEntries(anexosNecessarios().map((a) => [a, { ...taxas[a] }])), impedimentoSublimite: $('f-sublimite').checked, fatorR: $('f-fatorr').checked ? true : (itens.some((it) => it.atividade === '09') ? false : undefined) },
   };
 }
 
@@ -607,7 +628,7 @@ const semAcento = (t) => String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, ''
 
 const COLUNAS = {
   'regime-normal': ['documento', 'data', 'uf', 'municipio', 'tipo', 'codigo', 'classificacao', 'valor', 'descricao'],
-  'simples-nacional': ['documento', 'data', 'tipo_nota', 'anexo', 'aliquota_cbs', 'aliquota_ibs', 'ultrapassou_sublimite', 'tipo', 'codigo', 'classificacao', 'atividade', 'valor', 'descricao'],
+  'simples-nacional': ['documento', 'data', 'tipo_nota', 'aliquota_cbs', 'aliquota_ibs', 'fator_r', 'ultrapassou_sublimite', 'tipo', 'codigo', 'classificacao', 'atividade', 'valor', 'descricao'],
 };
 const EXEMPLOS = {
   'regime-normal': [
@@ -615,7 +636,7 @@ const EXEMPLOS = {
     ['NF-002', '10/03/2027', 'AC', 'Rio Branco', 'produto', '02013000', '000001', '80,00', 'Carne'],
   ],
   'simples-nacional': [
-    ['NF-001', '10/03/2027', 'nfe', 'I', '1,1612', '0,0129', 'nao', 'produto', '22030000', '000001', '01', '10000,00', 'Cerveja'],
+    ['NF-001', '10/03/2027', 'nfe', '1,1612', '0,0129', 'nao', 'nao', 'produto', '22030000', '000001', '01', '10000,00', 'Cerveja'],
   ],
 };
 
@@ -652,11 +673,19 @@ async function codigoMunicipio(uf, nome) {
   return achado ? String(achado.codigo) : null;
 }
 
+const sim = (t) => ['sim', 's', 'true', '1'].includes(semAcento(t));
+const ativCache = {};
+async function atividadesDoLote(data, tp) {
+  const k = data + tp;
+  if (!ativCache[k]) { try { ativCache[k] = lista(await json(`/v1/simples-nacional/atividades?data=${data}&tpDoc=${tp}`)); } catch { ativCache[k] = []; } }
+  return ativCache[k];
+}
+
 async function prepararLote(texto) {
   const linhas = lerCsv(texto).filter((l) => l.some((c) => String(c).trim() !== ''));
   if (linhas.length < 2) throw new Error('A planilha está vazia ou só tem o cabeçalho.');
   const cab = linhas[0].map((c) => semAcento(c).replace(/\s+/g, '_'));
-  const faltando = COLUNAS[loteRegime].filter((c) => !['documento', 'descricao', 'ultrapassou_sublimite'].includes(c) && !cab.includes(c));
+  const faltando = COLUNAS[loteRegime].filter((c) => !['documento', 'descricao', 'ultrapassou_sublimite', 'fator_r'].includes(c) && !cab.includes(c));
   if (faltando.length) throw new Error('Faltam colunas na planilha: ' + faltando.join(', ') + '. Baixe o modelo para conferir.');
   const idx = Object.fromEntries(cab.map((c, i) => [c, i]));
   const v = (l, c) => (idx[c] === undefined ? '' : String(l[idx[c]] ?? '').trim());
@@ -682,9 +711,20 @@ async function prepararLote(texto) {
         g.entrada.uf = uf; g.entrada.municipio = cod;
       } else {
         g.entrada.documento = semAcento(v(l, 'tipo_nota'));
-        g.entrada.aliquotas = { anexo: v(l, 'anexo').toUpperCase(), cbs: v(l, 'aliquota_cbs'), ibs: v(l, 'aliquota_ibs'), impedimentoSublimite: ['sim', 's', 'true', '1'].includes(semAcento(v(l, 'ultrapassou_sublimite'))) };
+        g.entrada.aliquotas = { porAnexo: {}, impedimentoSublimite: sim(v(l, 'ultrapassou_sublimite')), fatorR: sim(v(l, 'fator_r')) };
       }
       mapa.set(chave, g); grupos.push(g);
+    }
+    if (loteRegime === 'simples-nacional') {
+      const tp = { nfe: '55', nfce: '65', nfse: '91' }[g.entrada.documento];
+      if (!tp) { problemas.push({ linha: numero, documento: doc, mensagem: 'Tipo de nota deve ser nfe, nfce ou nfse.' }); continue; }
+      const ativs = await atividadesDoLote(data, tp);
+      const cod = item.atividade.replace(/\D/g, '').padStart(2, '0');
+      const a = ativs.find((x) => x.codigo === cod);
+      if (!a) { problemas.push({ linha: numero, documento: doc, mensagem: `Atividade "${item.atividade}" não existe para esse tipo de nota e data.` }); continue; }
+      item.atividade = cod;
+      const anexo = (g.entrada.aliquotas.fatorR && a.anexoComFatorR) ? a.anexoComFatorR : a.anexoSemFatorR;
+      if (anexo) g.entrada.aliquotas.porAnexo[anexo] = { cbs: v(l, 'aliquota_cbs'), ibs: v(l, 'aliquota_ibs') };
     }
     g.linhas.push(numero); g.entrada.itens.push(item);
   }

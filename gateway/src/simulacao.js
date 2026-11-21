@@ -169,11 +169,23 @@ export function montarSimples(entrada) {
   exige(entrada.itens.length <= 100, 'No máximo 100 itens por simulação');
 
   const al = entrada.aliquotas ?? {};
-  const chaveAnexo = ROMANOS[String(al.anexo ?? '').toUpperCase()];
-  exige(chaveAnexo, 'Escolha o anexo do Simples Nacional');
-
-  const par = { pCBSSN: percentual(al.cbs, 'Alíquota efetiva de CBS'), pIBSSN: percentual(al.ibs, 'Alíquota efetiva de IBS') };
-  const aliquotasEfetivas = { impedimentoSublimite: !!al.impedimentoSublimite, [chaveAnexo]: par };
+  const aliquotasEfetivas = { impedimentoSublimite: !!al.impedimentoSublimite };
+  if (al.porAnexo && typeof al.porAnexo === 'object') {
+    // Cada atividade usa um anexo; o cliente informa as alíquotas de cada anexo que aparece nos itens.
+    for (const [anexo, v] of Object.entries(al.porAnexo)) {
+      const chave = ROMANOS[String(anexo).toUpperCase()];
+      exige(chave, 'Anexo do Simples Nacional inválido');
+      aliquotasEfetivas[chave] = {
+        pCBSSN: percentual(v?.cbs, `Alíquota efetiva de CBS (Anexo ${anexo})`),
+        pIBSSN: percentual(v?.ibs, `Alíquota efetiva de IBS (Anexo ${anexo})`),
+      };
+    }
+    exige(Object.keys(aliquotasEfetivas).length > 1, 'Informe as alíquotas efetivas de CBS e IBS');
+  } else {
+    const chaveAnexo = ROMANOS[String(al.anexo ?? '').toUpperCase()];
+    exige(chaveAnexo, 'Escolha o anexo do Simples Nacional');
+    aliquotasEfetivas[chaveAnexo] = { pCBSSN: percentual(al.cbs, 'Alíquota efetiva de CBS'), pIBSSN: percentual(al.ibs, 'Alíquota efetiva de IBS') };
+  }
   if (al.fatorR !== undefined && al.fatorR !== null) aliquotasEfetivas.fatorR = !!al.fatorR;
 
   const itens = entrada.itens.map((it, i) => {

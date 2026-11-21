@@ -165,7 +165,7 @@ Códigos úteis: 401 (sem login), 429 (limite por minuto ou cota do plano), 400 
 
 ```bash
 cd gateway
-npm test      # 20 testes, sem dependências
+npm test      # 21 testes, sem dependências
 ```
 
 Os testes usam calculadoras falsas que respondem no formato documentado pela Receita. **Eles não substituem a validação com as calculadoras reais.**
@@ -205,7 +205,7 @@ docs/               produto e roadmap
 
 Leia antes de vender.
 
-- **Validação com as calculadoras reais:** a integração foi confirmada até a subida dos contêineres. Falta rodar simulações reais e ajustar o que a Receita rejeitar.
+- **Validação com as calculadoras reais:** os contratos (campos enviados e lidos, nos dois regimes, nas tabelas e no DANFSe) foram conferidos contra o código-fonte oficial e os testes passam com calculadoras simuladas. Falta rodar simulações reais de ponta a ponta e ajustar o que a Receita rejeitar. Itens de classificação que exigem quantidade (monofasia) e o Imposto Seletivo ainda não têm campo no formulário.
 - **Alíquotas de referência:** os padrões são os do exemplo de teste, não a legislação final.
 - **Código do produto ou serviço:** o cliente precisa saber o NCM (8 números) ou NBS (9 números). Não há busca por nome.
 - **Simples Nacional:** a alíquota efetiva é informada pelo usuário (extrato do PGDAS-D); o sistema não a calcula. ISS retido e benefícios municipais usam padrões.

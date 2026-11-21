@@ -19,6 +19,12 @@ export function loadConfig(env = process.env) {
       danfse: env.UPSTREAM_DANFSE || 'http://danfse:8080',
       timeoutMs: int(env.UPSTREAM_TIMEOUT_MS, 30000),
     },
+    // Alíquotas nominais de referência (%) exigidas pela calculadora a partir de 2027.
+    aliquotasReferencia: {
+      cbs: Number(env.ALIQUOTA_CBS ?? 8.8),
+      ibsEstadual: Number(env.ALIQUOTA_IBS_ESTADUAL ?? 0.05),
+      ibsMunicipal: Number(env.ALIQUOTA_IBS_MUNICIPAL ?? 0.05),
+    },
     maxJsonBytes: int(env.MAX_JSON_BYTES, 2 * 1024 * 1024),
     maxXmlBytes: int(env.MAX_XML_BYTES, 5 * 1024 * 1024),
     rateLimitPorMinuto: int(env.RATE_LIMIT_PER_MINUTE, 120),

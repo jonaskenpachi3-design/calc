@@ -3,224 +3,518 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Calculadora RTC</title>
+<title>Simulador CBS e IBS</title>
 <style>
-  :root { --bg:#f6f7f9; --card:#fff; --tx:#1b2430; --mut:#5d6b7c; --bd:#dde2e9; --ac:#0b5cab; --ac-tx:#fff; --err:#b42318; --ok:#067647; }
+  :root {
+    --bg:#f5f7fa; --card:#ffffff; --tx:#16202c; --mut:#5a6878; --bd:#d9e0e8;
+    --ac:#0b5cab; --ac-tx:#ffffff; --ac-soft:#e6f0fb;
+    --ok:#067647; --ok-bg:#e7f6ee; --err:#b42318; --err-bg:#fdeceb; --warn:#8a5a00; --warn-bg:#fff4dc;
+  }
   @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) { --bg:#10151c; --card:#18202a; --tx:#e7ecf2; --mut:#93a1b3; --bd:#2a3644; --ac:#4c9aff; --ac-tx:#06121f; --err:#ff8a80; --ok:#5ed39a; }
+    :root:not([data-theme="light"]) {
+      --bg:#0f141b; --card:#171e27; --tx:#e6ebf1; --mut:#94a2b3; --bd:#2a3644;
+      --ac:#5aa2ff; --ac-tx:#06121f; --ac-soft:#17283d;
+      --ok:#5ed39a; --ok-bg:#0f2a1e; --err:#ff9087; --err-bg:#341613; --warn:#f3c26b; --warn-bg:#2f2410;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:#0f141b; --card:#171e27; --tx:#e6ebf1; --mut:#94a2b3; --bd:#2a3644;
+    --ac:#5aa2ff; --ac-tx:#06121f; --ac-soft:#17283d;
+    --ok:#5ed39a; --ok-bg:#0f2a1e; --err:#ff9087; --err-bg:#341613; --warn:#f3c26b; --warn-bg:#2f2410;
   }
   * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--tx); font:15px/1.5 system-ui, sans-serif; }
-  header { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--bd); background:var(--card); }
-  header h1 { font-size:17px; margin:0; }
-  main { max-width:960px; margin:0 auto; padding:16px; display:grid; gap:16px; }
-  section { background:var(--card); border:1px solid var(--bd); border-radius:10px; padding:16px; }
-  h2 { font-size:16px; margin:0 0 12px; }
-  label { display:block; font-size:13px; color:var(--mut); margin:8px 0 4px; }
-  input, select, textarea { width:100%; padding:8px 10px; border:1px solid var(--bd); border-radius:6px; background:var(--bg); color:var(--tx); font:inherit; }
-  textarea { font:13px/1.4 ui-monospace, monospace; min-height:180px; }
-  button { padding:8px 14px; border:0; border-radius:6px; background:var(--ac); color:var(--ac-tx); font:inherit; cursor:pointer; }
-  button.sec { background:transparent; color:var(--ac); border:1px solid var(--bd); }
-  button:disabled { opacity:.5; cursor:default; }
-  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:end; }
-  .row > * { flex:1 1 160px; }
-  .row > button { flex:0 0 auto; }
-  pre { background:var(--bg); border:1px solid var(--bd); border-radius:6px; padding:10px; overflow:auto; max-height:360px; font-size:12.5px; }
-  table { width:100%; border-collapse:collapse; font-size:13.5px; }
-  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--bd); }
-  .bar { height:8px; background:var(--bd); border-radius:4px; overflow:hidden; }
-  .bar > i { display:block; height:100%; background:var(--ac); }
-  .msg { font-size:13px; margin-top:8px; min-height:1.2em; }
-  .msg.err { color:var(--err); } .msg.ok { color:var(--ok); }
-  .tabs { display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap; }
-  .tabs button { background:transparent; color:var(--tx); border:1px solid var(--bd); }
-  .tabs button[aria-pressed="true"] { background:var(--ac); color:var(--ac-tx); border-color:var(--ac); }
+  body { margin:0; background:var(--bg); color:var(--tx); font:16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
   [hidden] { display:none !important; }
+  .wrap { max-width:960px; margin:0 auto; padding:0 16px; }
+  header.top { background:var(--card); border-bottom:1px solid var(--bd); }
+  header.top .wrap { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:60px; }
+  .logo { font-weight:700; font-size:18px; }
+  .logo span { color:var(--ac); }
+  h1 { font-size:30px; line-height:1.2; margin:0 0 12px; }
+  h2 { font-size:20px; margin:0 0 12px; }
+  h3 { font-size:16px; margin:0 0 6px; }
+  p { margin:0 0 12px; }
+  .mut { color:var(--mut); }
+  .small { font-size:14px; }
+  .card { background:var(--card); border:1px solid var(--bd); border-radius:12px; padding:20px; margin-bottom:16px; }
+  label { display:block; font-weight:600; font-size:14px; margin:0 0 4px; }
+  .hint { font-weight:400; color:var(--mut); font-size:13px; display:block; margin-top:2px; }
+  input, select { width:100%; min-height:44px; padding:8px 12px; border:1px solid var(--bd); border-radius:8px; background:var(--bg); color:var(--tx); font:inherit; }
+  input:focus, select:focus, button:focus-visible, summary:focus-visible { outline:3px solid var(--ac); outline-offset:1px; }
+  .grid { display:grid; gap:14px; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); margin-bottom:14px; }
+  button { min-height:44px; padding:8px 18px; border:0; border-radius:8px; background:var(--ac); color:var(--ac-tx); font:inherit; font-weight:600; cursor:pointer; }
+  button.sec { background:transparent; color:var(--ac); border:1px solid var(--bd); }
+  button.link { background:none; color:var(--ac); padding:0 4px; min-height:0; font-weight:500; text-decoration:underline; }
+  button:disabled { opacity:.55; cursor:default; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .msg { padding:12px 14px; border-radius:8px; margin:12px 0; font-size:15px; }
+  .msg.err { background:var(--err-bg); color:var(--err); }
+  .msg.ok { background:var(--ok-bg); color:var(--ok); }
+  .msg.warn { background:var(--warn-bg); color:var(--warn); }
+  .hero { display:grid; gap:24px; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); padding:36px 0 12px; align-items:start; }
+  .benefits { list-style:none; padding:0; margin:18px 0 0; }
+  .benefits li { padding:6px 0 6px 28px; position:relative; }
+  .benefits li::before { content:"✓"; position:absolute; left:0; color:var(--ok); font-weight:700; }
+  .plans { display:grid; gap:14px; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); margin:8px 0 40px; }
+  .plan h3 { font-size:18px; }
+  .plan ul { padding-left:18px; margin:8px 0 0; }
+  .tabs { display:flex; gap:4px; flex-wrap:wrap; margin:18px 0 16px; border-bottom:1px solid var(--bd); }
+  .tabs button { background:none; color:var(--mut); border-radius:8px 8px 0 0; border-bottom:3px solid transparent; min-height:46px; }
+  .tabs button[aria-selected="true"] { color:var(--ac); border-bottom-color:var(--ac); }
+  .choice { display:grid; gap:12px; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); margin-bottom:18px; }
+  .choice button { text-align:left; background:var(--card); color:var(--tx); border:2px solid var(--bd); padding:14px; font-weight:400; }
+  .choice button[aria-pressed="true"] { border-color:var(--ac); background:var(--ac-soft); }
+  .choice strong { display:block; font-size:16px; }
+  .item { border:1px solid var(--bd); border-radius:10px; padding:14px; margin-bottom:12px; background:var(--bg); }
+  .item .head { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; font-weight:600; }
+  .bar { height:10px; background:var(--bd); border-radius:5px; overflow:hidden; margin:4px 0 12px; }
+  .bar i { display:block; height:100%; background:var(--ac); }
+  .totals { display:grid; gap:12px; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); margin:14px 0; }
+  .kpi { background:var(--ac-soft); border-radius:10px; padding:14px; }
+  .kpi .v { font-size:22px; font-weight:700; }
+  .kpi .l { color:var(--mut); font-size:14px; }
+  .kpi.main { background:var(--ac); color:var(--ac-tx); }
+  .kpi.main .l { color:inherit; opacity:.85; }
+  table { width:100%; border-collapse:collapse; font-size:14.5px; }
+  th, td { text-align:left; padding:9px 8px; border-bottom:1px solid var(--bd); vertical-align:top; }
+  td.n, th.n { text-align:right; white-space:nowrap; }
+  .scroll { overflow-x:auto; }
+  .badge { display:inline-block; padding:2px 9px; border-radius:99px; font-size:12.5px; font-weight:600; }
+  .badge.calculado { background:var(--ok-bg); color:var(--ok); }
+  .badge.erro { background:var(--err-bg); color:var(--err); }
+  .badge.indisponivel { background:var(--warn-bg); color:var(--warn); }
+  details { margin:8px 0; } summary { cursor:pointer; font-weight:600; min-height:32px; }
+  code.key { display:block; word-break:break-all; padding:10px; background:var(--bg); border:1px solid var(--bd); border-radius:8px; }
+  footer { padding:28px 0 40px; color:var(--mut); font-size:13px; }
+  @media print {
+    body { background:#fff; color:#000; }
+    header.top, .tabs, .noprint, footer { display:none !important; }
+    .card { border:0; padding:0; }
+  }
 </style>
 </head>
 <body>
-<header>
-  <h1>Calculadora RTC</h1>
-  <div id="sessao" hidden><span id="quem"></span> <button class="sec" id="sair">Sair</button></div>
+<header class="top">
+  <div class="wrap">
+    <div class="logo">Simulador <span>CBS e IBS</span></div>
+    <div id="sessao" class="row" hidden><span id="quem" class="small mut"></span><button class="sec" id="sair">Sair</button></div>
+  </div>
 </header>
-<main>
-  <section id="auth">
-    <h2>Entrar</h2>
-    <div class="row">
-      <div><label for="a-nome">Nome da empresa (só no cadastro)</label><input id="a-nome" autocomplete="organization"></div>
-      <div><label for="a-email">E-mail</label><input id="a-email" type="email" autocomplete="email"></div>
-      <div><label for="a-senha">Senha (mín. 10 caracteres)</label><input id="a-senha" type="password" autocomplete="current-password"></div>
+
+<main class="wrap">
+  <!-- ======== Página inicial (visitante) ======== -->
+  <section id="visitante" hidden>
+    <div class="hero">
+      <div>
+        <h1>Descubra quanto vai pagar de CBS e IBS antes de emitir a nota</h1>
+        <p class="mut">Preencha os dados da venda ou do serviço e veja o valor dos novos tributos da Reforma Tributária, item por item, com o mesmo motor de cálculo publicado pela Receita Federal.</p>
+        <ul class="benefits">
+          <li>Sem planilhas e sem termos técnicos: você preenche um formulário.</li>
+          <li>Serve para empresas do regime normal e do Simples Nacional.</li>
+          <li>Gere o PDF (DANFSe) da sua nota de serviço a partir do arquivo XML.</li>
+          <li>Guarde o histórico e imprima os resultados.</li>
+        </ul>
+      </div>
+      <div class="card" id="entrar-card">
+        <h2 id="entrar-titulo">Entrar</h2>
+        <div id="campo-nome" hidden style="margin-bottom:14px"><label for="a-nome">Nome da empresa</label><input id="a-nome" autocomplete="organization"></div>
+        <div style="margin-bottom:14px"><label for="a-email">E-mail</label><input id="a-email" type="email" autocomplete="email"></div>
+        <div style="margin-bottom:14px"><label for="a-senha">Senha <span class="hint">Mínimo de 10 caracteres</span></label><input id="a-senha" type="password" autocomplete="current-password"></div>
+        <div class="row"><button id="a-enviar">Entrar</button><button class="link" id="a-trocar">Ainda não tenho conta</button></div>
+        <div id="a-msg" role="alert"></div>
+      </div>
     </div>
-    <div class="row" style="margin-top:10px"><button id="entrar">Entrar</button><button class="sec" id="cadastrar">Criar conta</button></div>
-    <div class="msg" id="a-msg"></div>
+    <h2>Planos</h2>
+    <div class="plans" id="planos"></div>
   </section>
 
-  <div id="app" hidden style="display:grid;gap:16px">
-    <section>
-      <h2>Uso do mês</h2>
-      <div id="uso"></div>
-    </section>
+  <!-- ======== Aplicação (logado) ======== -->
+  <section id="app" hidden>
+    <div class="tabs" role="tablist">
+      <button role="tab" data-aba="simular" aria-selected="true">Simular tributos</button>
+      <button role="tab" data-aba="nota" aria-selected="false">PDF da nota de serviço</button>
+      <button role="tab" data-aba="historico" aria-selected="false">Minhas simulações</button>
+      <button role="tab" data-aba="conta" aria-selected="false">Minha conta</button>
+    </div>
 
-    <section>
-      <h2>Calcular tributos</h2>
-      <div class="tabs" role="group" aria-label="Regime">
-        <button data-regime="regular" aria-pressed="true">Regime regular</button>
-        <button data-regime="simples" aria-pressed="false">Simples Nacional</button>
+    <!-- Simular -->
+    <div id="aba-simular">
+      <div id="passo-form" class="card">
+        <h2>1. Para quem é a simulação?</h2>
+        <div class="choice" id="escolha-regime">
+          <button data-regime="regime-normal" aria-pressed="true"><strong>Empresa no regime normal</strong><span class="mut small">Lucro presumido ou lucro real</span></button>
+          <button data-regime="simples-nacional" aria-pressed="false"><strong>Empresa do Simples Nacional</strong><span class="mut small">ME, EPP e demais optantes</span></button>
+        </div>
+
+        <h2>2. Dados da operação</h2>
+        <div class="grid">
+          <div><label for="f-data">Data da venda ou do serviço</label><input id="f-data" type="date"></div>
+          <div class="so-normal"><label for="f-uf">Estado</label><select id="f-uf"><option value="">Carregando…</option></select></div>
+          <div class="so-normal"><label for="f-mun">Município</label><select id="f-mun" disabled><option value="">Escolha o estado</option></select></div>
+          <div class="so-simples"><label for="f-doc">Tipo de nota</label>
+            <select id="f-doc"><option value="nfe">NF-e (venda de produtos)</option><option value="nfce">NFC-e (venda ao consumidor)</option><option value="nfse">NFS-e (serviços)</option></select></div>
+        </div>
+
+        <div class="so-simples" id="bloco-simples">
+          <div class="msg warn small">A alíquota efetiva do Simples Nacional é calculada pela Receita a partir do seu faturamento dos últimos 12 meses. Informe abaixo os valores que constam no seu extrato do Simples (PGDAS-D) ou que seu contador passar.</div>
+          <div class="grid">
+            <div><label for="f-anexo">Anexo do Simples Nacional</label><select id="f-anexo"><option value="I">Anexo I – Comércio</option><option value="II">Anexo II – Indústria</option><option value="III">Anexo III – Serviços</option><option value="IV">Anexo IV – Serviços</option><option value="V">Anexo V – Serviços</option></select></div>
+            <div><label for="f-cbs">Alíquota efetiva de CBS (%)<span class="hint">Exemplo: 1,1612</span></label><input id="f-cbs" inputmode="decimal" placeholder="0,0000"></div>
+            <div><label for="f-ibs">Alíquota efetiva de IBS (%)<span class="hint">Exemplo: 0,0129</span></label><input id="f-ibs" inputmode="decimal" placeholder="0,0000"></div>
+          </div>
+          <div class="row" style="margin-bottom:14px">
+            <label style="font-weight:400"><input type="checkbox" id="f-sublimite" style="width:auto;min-height:0"> Ultrapassei o sublimite de receita</label>
+            <label style="font-weight:400"><input type="checkbox" id="f-fatorr" style="width:auto;min-height:0"> Meu fator “r” é 28% ou mais (só para a atividade 09)</label>
+          </div>
+        </div>
+
+        <h2>3. O que foi vendido?</h2>
+        <div id="itens"></div>
+        <div class="row" style="margin-bottom:8px"><button class="sec" id="add-item">+ Adicionar outro item</button></div>
+        <div id="f-msg" role="alert"></div>
+        <div class="row"><button id="calcular">Calcular tributos</button></div>
       </div>
-      <label for="c-json">Operação (JSON)</label>
-      <textarea id="c-json" spellcheck="false"></textarea>
-      <div class="row" style="margin-top:10px"><button id="calcular">Calcular</button></div>
-      <div class="msg" id="c-msg"></div>
-      <pre id="c-out" hidden></pre>
-    </section>
 
-    <section>
-      <h2>Gerar DANFSe (PDF)</h2>
-      <div class="row">
-        <div><label for="d-xml">XML da NFS-e</label><input id="d-xml" type="file" accept=".xml,application/xml,text/xml"></div>
-        <div><label for="d-stc">Situação</label><select id="d-stc"><option value="0">Válida</option><option value="1">Substituída</option><option value="2">Cancelada</option></select></div>
-        <div><label for="d-canhoto">Canhoto</label><select id="d-canhoto"><option value="true">Com canhoto</option><option value="false">Sem canhoto</option></select></div>
-        <button id="gerar">Gerar PDF</button>
+      <div id="passo-resultado" hidden></div>
+    </div>
+
+    <!-- Nota -->
+    <div id="aba-nota" hidden>
+      <div class="card">
+        <h2>Gerar o PDF da nota de serviço (DANFSe)</h2>
+        <p class="mut">Envie o arquivo XML da sua NFS-e e baixe o PDF pronto para imprimir ou enviar ao cliente.</p>
+        <div class="grid">
+          <div><label for="d-xml">Arquivo XML da nota</label><input id="d-xml" type="file" accept=".xml,application/xml,text/xml"></div>
+          <div><label for="d-stc">Situação da nota</label><select id="d-stc"><option value="0">Válida</option><option value="1">Substituída</option><option value="2">Cancelada</option></select></div>
+          <div><label for="d-canhoto">Canhoto</label><select id="d-canhoto"><option value="false">Sem canhoto</option><option value="true">Com canhoto</option></select></div>
+        </div>
+        <div class="row"><button id="gerar">Gerar PDF</button></div>
+        <div id="d-msg" role="alert"></div>
       </div>
-      <div class="msg" id="d-msg"></div>
-    </section>
+    </div>
 
-    <section>
-      <h2>Chaves de API</h2>
-      <div class="row"><div><label for="k-nome">Nome da nova chave</label><input id="k-nome" placeholder="ex.: ERP produção"></div><button id="k-criar">Criar</button></div>
-      <div class="msg" id="k-msg"></div>
-      <table><thead><tr><th>Nome</th><th>Prefixo</th><th>Último uso</th><th></th></tr></thead><tbody id="k-lista"></tbody></table>
-    </section>
+    <!-- Histórico -->
+    <div id="aba-historico" hidden>
+      <div class="card">
+        <h2>Minhas simulações</h2>
+        <div class="scroll"><table><thead><tr><th>Quando</th><th>O que foi feito</th><th>Resultado</th></tr></thead><tbody id="h-lista"></tbody></table></div>
+        <p id="h-vazio" class="mut" hidden>Nada por aqui ainda. Faça sua primeira simulação.</p>
+      </div>
+    </div>
 
-    <section>
-      <h2>Histórico recente</h2>
-      <table><thead><tr><th>Quando</th><th>Serviço</th><th>Status</th><th>ms</th><th>Operação</th></tr></thead><tbody id="h-lista"></tbody></table>
-    </section>
-  </div>
+    <!-- Conta -->
+    <div id="aba-conta" hidden>
+      <div class="card">
+        <h2>Seu plano</h2>
+        <p id="c-plano"></p>
+        <div id="uso"></div>
+      </div>
+      <div class="card">
+        <h2>Integração com outros sistemas</h2>
+        <p class="mut">Só é necessário se o sistema de gestão da sua empresa for se conectar ao simulador. Peça ao responsável de TI.</p>
+        <details>
+          <summary>Chaves de acesso</summary>
+          <div class="grid" style="margin-top:10px"><div><label for="k-nome">Nome para a nova chave</label><input id="k-nome" placeholder="ex.: Sistema de vendas"></div></div>
+          <div class="row"><button class="sec" id="k-criar">Criar chave</button></div>
+          <div id="k-msg" role="status"></div>
+          <div class="scroll"><table><thead><tr><th>Nome</th><th>Último uso</th><th></th></tr></thead><tbody id="k-lista"></tbody></table></div>
+        </details>
+      </div>
+    </div>
+  </section>
 </main>
+
+<footer class="wrap">
+  <p>As simulações usam as calculadoras publicadas pela Receita Federal e têm caráter informativo: não substituem a orientação do seu contador nem a apuração oficial dos tributos.</p>
+</footer>
+
 <script>
+'use strict';
 const $ = (id) => document.getElementById(id);
+const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+const pct = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 4 });
+const dinheiro = (v) => (v === null || v === undefined ? '—' : brl.format(v));
+
+function el(tag, props, ...filhos) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props || {})) {
+    if (k === 'class') e.className = v; else if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else if (v !== false && v != null) e.setAttribute(k, v === true ? '' : v);
+  }
+  for (const f of filhos.flat()) if (f != null) e.append(f.nodeType ? f : document.createTextNode(String(f)));
+  return e;
+}
+const limpar = (n) => n.replaceChildren();
+function aviso(id, texto, tipo) { const n = $(id); limpar(n); if (texto) n.append(el('div', { class: 'msg ' + (tipo || '') }, texto)); }
+
 let token = null;
-try { token = sessionStorage.getItem('rtc_token'); } catch {}
-
-const EXEMPLOS = {
-  regular: {
-    id: 'op-001', versao: '1.0.0', dhFatoGerador: '2027-03-10T10:00:00-03:00', municipio: 4314902, uf: 'RS',
-    itens: [{ numero: 1, nbs: '122011200', cst: '200', cClassTrib: '200028', baseCalculo: 1200.0,
-      aliquotasNominais: { cbs: 8.8, ibsEstadual: 0.05, ibsMunicipal: 0.05 } }],
-  },
-  simples: {
-    id: 'op-002', versao: '3.0.0', data: '2027-03-15', tpDoc: '55', CRT: '1',
-    aliquotasEfetivas: {},
-    itens: [{ numero: 1, cAtivSN: '01', cClassTrib: '000001', ncm: '22030000', baseCalculo: '10000.00', valorImpostoSeletivo: '0.00' }],
-  },
-};
-let regime = 'regular';
-const mostrarExemplo = () => { $('c-json').value = JSON.stringify(EXEMPLOS[regime], null, 2); };
-
-function aviso(id, texto, tipo) { const e = $(id); e.textContent = texto; e.className = 'msg ' + (tipo || ''); }
+try { token = sessionStorage.getItem('rtc_token'); } catch { /* sem armazenamento */ }
 
 async function api(caminho, opcoes = {}) {
   const res = await fetch(caminho, { ...opcoes, headers: { ...(opcoes.headers || {}), ...(token ? { authorization: 'Bearer ' + token } : {}) } });
-  if (res.status === 401 && token) { sair(); }
+  if (res.status === 401 && token) sair();
   return res;
 }
 async function json(caminho, opcoes) {
-  const res = await api(caminho, opcoes);
+  let res;
+  try { res = await api(caminho, opcoes); } catch { throw new Error('Sem conexão com o servidor. Tente novamente.'); }
   const dados = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(dados?.erro?.mensagem || 'Erro ' + res.status);
+  if (!res.ok) throw new Error(dados?.erro?.mensagem || 'Não foi possível concluir (erro ' + res.status + ').');
   return dados;
 }
+const post = (c, corpo) => json(c, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(corpo) });
+const lista = (x) => (Array.isArray(x) ? x : x?.atividades || x?.itens || []);
 
-function sair() { token = null; try { sessionStorage.removeItem('rtc_token'); } catch {} render(); }
-
-function render() {
-  $('auth').hidden = !!token; $('app').hidden = !token; $('sessao').hidden = !token;
-  if (token) atualizarTudo();
+/* ---------- visitante ---------- */
+let modoCadastro = false;
+function modoEntrada() {
+  $('entrar-titulo').textContent = modoCadastro ? 'Criar conta gratuita' : 'Entrar';
+  $('campo-nome').hidden = !modoCadastro;
+  $('a-enviar').textContent = modoCadastro ? 'Criar conta' : 'Entrar';
+  $('a-trocar').textContent = modoCadastro ? 'Já tenho conta' : 'Ainda não tenho conta';
+  $('a-senha').autocomplete = modoCadastro ? 'new-password' : 'current-password';
 }
-
-async function autenticar(rota) {
+$('a-trocar').onclick = () => { modoCadastro = !modoCadastro; aviso('a-msg'); modoEntrada(); };
+$('a-enviar').onclick = async () => {
+  $('a-enviar').disabled = true;
   try {
     const corpo = { email: $('a-email').value, senha: $('a-senha').value, nome: $('a-nome').value };
-    const r = await json(rota, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(corpo) });
-    token = r.token; try { sessionStorage.setItem('rtc_token', token); } catch {}
-    $('a-senha').value = ''; aviso('a-msg', ''); render();
+    const r = await post(modoCadastro ? '/auth/register' : '/auth/login', corpo);
+    token = r.token; try { sessionStorage.setItem('rtc_token', token); } catch { /* ok */ }
+    $('a-senha').value = ''; aviso('a-msg'); render();
   } catch (e) { aviso('a-msg', e.message, 'err'); }
-}
-$('entrar').onclick = () => autenticar('/auth/login');
-$('cadastrar').onclick = () => autenticar('/auth/register');
-$('sair').onclick = sair;
-
-async function atualizarTudo() {
-  try {
-    const me = await json('/me'); $('quem').textContent = me.nome + ' · plano ' + me.plano;
-    const u = await json('/usage');
-    $('uso').replaceChildren(...Object.entries(u.uso).map(([nome, v]) => {
-      const d = document.createElement('div');
-      const pct = v.limite ? Math.min(100, (v.usado / v.limite) * 100) : 0;
-      d.innerHTML = '<div></div><div class="bar"><i></i></div>';
-      d.firstChild.textContent = (nome === 'calculo' ? 'Cálculos' : 'DANFSe') + ': ' + v.usado + ' / ' + (v.limite ?? 'ilimitado');
-      d.querySelector('i').style.width = pct + '%';
-      d.style.marginBottom = '10px'; return d;
-    }));
-    const k = await json('/keys');
-    $('k-lista').replaceChildren(...k.chaves.map((c) => {
-      const tr = document.createElement('tr');
-      [c.nome, c.prefixo + '…', c.revogada_em ? 'revogada' : (c.ultimo_uso_em || '—')].forEach((t) => { const td = document.createElement('td'); td.textContent = t; tr.append(td); });
-      const td = document.createElement('td');
-      if (!c.revogada_em) { const b = document.createElement('button'); b.className = 'sec'; b.textContent = 'Revogar';
-        b.onclick = async () => { await api('/keys/' + c.id, { method: 'DELETE' }); atualizarTudo(); }; td.append(b); }
-      tr.append(td); return tr;
-    }));
-    const h = await json('/history?limite=20');
-    $('h-lista').replaceChildren(...h.eventos.map((e) => {
-      const tr = document.createElement('tr');
-      [e.criadoEm.replace('T', ' ').slice(0, 19), e.servico, e.status, e.duracaoMs, e.operacaoId || '—'].forEach((t) => { const td = document.createElement('td'); td.textContent = t; tr.append(td); });
-      return tr;
-    }));
-  } catch (e) { /* sessão expirada já tratada em api() */ }
-}
-
-document.querySelectorAll('.tabs button').forEach((b) => b.onclick = () => {
-  regime = b.dataset.regime;
-  document.querySelectorAll('.tabs button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
-  mostrarExemplo();
-});
-
-$('calcular').onclick = async () => {
-  let operacao;
-  try { operacao = JSON.parse($('c-json').value); } catch { return aviso('c-msg', 'JSON inválido', 'err'); }
-  aviso('c-msg', 'Calculando…');
-  try {
-    const res = await api('/v1/calculo', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ regime, operacao }) });
-    const dados = await res.json().catch(() => ({}));
-    $('c-out').hidden = false; $('c-out').textContent = JSON.stringify(dados, null, 2);
-    aviso('c-msg', res.ok ? 'Concluído' : (dados?.erro?.mensagem || 'Erro ' + res.status), res.ok ? 'ok' : 'err');
-    atualizarTudo();
-  } catch (e) { aviso('c-msg', e.message, 'err'); }
+  $('a-enviar').disabled = false;
 };
 
+const NOMES_PLANO = { gratuito: 'Gratuito', profissional: 'Profissional', ilimitado: 'Ilimitado' };
+async function carregarPlanos() {
+  try {
+    const { planos } = await json('/planos');
+    const alvo = $('planos'); limpar(alvo);
+    for (const [chave, lim] of Object.entries(planos)) {
+      alvo.append(el('div', { class: 'card plan' },
+        el('h3', {}, NOMES_PLANO[chave] || chave),
+        el('ul', {},
+          el('li', {}, lim.calculo === null ? 'Simulações sem limite' : `${lim.calculo.toLocaleString('pt-BR')} simulações por mês`),
+          el('li', {}, lim.danfse === null ? 'PDFs de nota sem limite' : `${lim.danfse.toLocaleString('pt-BR')} PDFs de nota por mês`))));
+    }
+  } catch { /* a página funciona sem a lista de planos */ }
+}
+
+/* ---------- sessão ---------- */
+function sair() { token = null; try { sessionStorage.removeItem('rtc_token'); } catch { /* ok */ } render(); }
+$('sair').onclick = sair;
+
+function render() {
+  $('visitante').hidden = !!token; $('app').hidden = !token; $('sessao').hidden = !token;
+  if (token) { iniciarApp(); } else { carregarPlanos(); }
+}
+
+/* ---------- abas ---------- */
+function abrirAba(nome) {
+  document.querySelectorAll('.tabs button').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.aba === nome)));
+  for (const a of ['simular', 'nota', 'historico', 'conta']) $('aba-' + a).hidden = a !== nome;
+  if (nome === 'historico') carregarHistorico();
+  if (nome === 'conta') carregarConta();
+}
+document.querySelectorAll('.tabs button').forEach((b) => { b.onclick = () => abrirAba(b.dataset.aba); });
+
+/* ---------- formulário de simulação ---------- */
+let regime = 'regime-normal';
+let itens = [];
+const cache = {};
+const hoje = () => new Date().toISOString().slice(0, 10);
+
+function aplicarRegime() {
+  document.querySelectorAll('#escolha-regime button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.regime === regime)));
+  document.querySelectorAll('.so-normal').forEach((n) => { n.hidden = regime !== 'regime-normal'; });
+  document.querySelectorAll('.so-simples').forEach((n) => { n.hidden = regime !== 'simples-nacional'; });
+  itens = []; novoItem(); desenharItens(); carregarListas();
+}
+document.querySelectorAll('#escolha-regime button').forEach((b) => { b.onclick = () => { regime = b.dataset.regime; aplicarRegime(); }; });
+$('f-doc').onchange = () => { if (regime === 'simples-nacional') { itens = []; novoItem(); desenharItens(); carregarListas(); } };
+$('f-data').onchange = () => carregarListas();
+
+const novoItem = () => itens.push({ tipo: regime === 'simples-nacional' && $('f-doc').value !== 'nfse' ? 'produto' : 'produto', descricao: '', codigo: '', classificacao: '', atividade: '', valor: '' });
+
+async function carregarUfs() {
+  if (!cache.ufs) { try { cache.ufs = lista(await json('/v1/dados/ufs')); } catch { cache.ufs = []; } }
+  const s = $('f-uf'); limpar(s);
+  s.append(el('option', { value: '' }, 'Escolha o estado'));
+  cache.ufs.slice().sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')).forEach((u) => s.append(el('option', { value: u.sigla }, u.nome)));
+}
+$('f-uf').onchange = async () => {
+  const uf = $('f-uf').value; const s = $('f-mun'); limpar(s);
+  if (!uf) { s.append(el('option', { value: '' }, 'Escolha o estado')); s.disabled = true; return; }
+  s.append(el('option', { value: '' }, 'Carregando…'));
+  try {
+    const ms = lista(await json('/v1/dados/ufs/municipios?siglaUf=' + encodeURIComponent(uf)));
+    limpar(s); s.append(el('option', { value: '' }, 'Escolha o município'));
+    ms.slice().sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')).forEach((m) => s.append(el('option', { value: String(m.codigo) }, m.nome)));
+    s.disabled = false;
+  } catch (e) { limpar(s); s.append(el('option', { value: '' }, 'Não foi possível carregar')); aviso('f-msg', e.message, 'err'); }
+};
+
+async function carregarListas() {
+  const d = $('f-data').value || hoje();
+  const k = 'cl' + d;
+  if (!cache[k]) { try { cache[k] = lista(await json('/v1/dados/classificacoes-tributarias/cbs-ibs?data=' + d)); } catch { cache[k] = []; } }
+  cache.atual = cache[k];
+  if (regime === 'simples-nacional') {
+    const tp = { nfe: '55', nfce: '65', nfse: '91' }[$('f-doc').value];
+    const ka = `at${d}${tp}`;
+    if (!cache[ka]) { try { cache[ka] = lista(await json(`/v1/simples-nacional/atividades?data=${d}&tpDoc=${tp}`)); } catch { cache[ka] = []; } }
+    cache.atividades = cache[ka];
+  }
+  desenharItens();
+}
+
+function campo(rotulo, dica, controle, id) {
+  return el('div', {}, el('label', { for: id }, rotulo, dica ? el('span', { class: 'hint' }, dica) : null), controle);
+}
+
+function desenharItens() {
+  const alvo = $('itens'); limpar(alvo);
+  const servicoFixo = regime === 'simples-nacional' && $('f-doc').value === 'nfse';
+  itens.forEach((it, i) => {
+    if (servicoFixo) it.tipo = 'servico';
+    const id = (n) => `i${i}-${n}`;
+    const tipo = el('select', { id: id('tipo'), onchange: (e) => { it.tipo = e.target.value; desenharItens(); } },
+      el('option', { value: 'produto', selected: it.tipo === 'produto' }, 'Produto (mercadoria)'),
+      el('option', { value: 'servico', selected: it.tipo === 'servico' }, 'Serviço'));
+    if (servicoFixo) tipo.disabled = true;
+    const classes = (cache.atual || []).map((c) => el('option', { value: c.codigo, selected: it.classificacao === c.codigo }, `${c.codigo} – ${c.descricao || c.descricaoTratamentoTributario || ''}`.slice(0, 120)));
+    const cls = el('select', { id: id('cls'), onchange: (e) => { it.classificacao = e.target.value; } },
+      el('option', { value: '' }, classes.length ? 'Escolha a classificação' : 'Lista indisponível'), classes);
+    const linha1 = [
+      campo('Tipo', null, tipo, id('tipo')),
+      campo('Descrição (opcional)', 'Só para você identificar', el('input', { id: id('desc'), value: it.descricao, maxlength: 60, oninput: (e) => { it.descricao = e.target.value; } }), id('desc')),
+      campo(it.tipo === 'servico' ? 'Código NBS do serviço' : 'Código NCM do produto',
+        it.tipo === 'servico' ? '9 números, consta no cadastro do serviço' : '8 números, consta no cadastro do produto',
+        el('input', { id: id('cod'), value: it.codigo, inputmode: 'numeric', maxlength: 12, oninput: (e) => { it.codigo = e.target.value; } }), id('cod')),
+      campo('Valor total (R$)', 'Valor do item na nota', el('input', { id: id('val'), value: it.valor, inputmode: 'decimal', placeholder: '0,00', oninput: (e) => { it.valor = e.target.value; } }), id('val')),
+    ];
+    const linha2 = [campo('Classificação tributária', 'Como esse item é tratado pela lei. Em caso de dúvida, pergunte ao seu contador.', cls, id('cls'))];
+    if (regime === 'simples-nacional') {
+      const ats = (cache.atividades || []).map((a) => el('option', { value: a.codigo, selected: it.atividade === a.codigo }, `${a.codigo} – ${a.descricao}`.slice(0, 120)));
+      linha2.push(campo('Atividade no Simples Nacional', null, el('select', { id: id('ativ'), onchange: (e) => { it.atividade = e.target.value; } },
+        el('option', { value: '' }, ats.length ? 'Escolha a atividade' : 'Lista indisponível'), ats), id('ativ')));
+    }
+    alvo.append(el('div', { class: 'item' },
+      el('div', { class: 'head' }, el('span', {}, `Item ${i + 1}`),
+        itens.length > 1 ? el('button', { class: 'link', type: 'button', onclick: () => { itens.splice(i, 1); desenharItens(); } }, 'Remover') : null),
+      el('div', { class: 'grid' }, linha1), el('div', { class: 'grid' }, linha2)));
+  });
+  $('add-item').hidden = servicoFixo;
+}
+$('add-item').onclick = () => { novoItem(); desenharItens(); };
+
+function montarEntrada() {
+  const base = { data: $('f-data').value, itens: itens.map((it) => ({ ...it })) };
+  if (regime === 'regime-normal') return { ...base, uf: $('f-uf').value, municipio: $('f-mun').value };
+  return {
+    ...base, documento: $('f-doc').value,
+    aliquotas: { anexo: $('f-anexo').value, cbs: $('f-cbs').value, ibs: $('f-ibs').value, impedimentoSublimite: $('f-sublimite').checked, fatorR: $('f-fatorr').checked ? true : undefined },
+  };
+}
+
+$('calcular').onclick = async () => {
+  aviso('f-msg'); const b = $('calcular'); b.disabled = true; b.textContent = 'Calculando…';
+  try {
+    const r = await post('/v1/simulacoes/' + regime, montarEntrada());
+    mostrarResultado(r);
+  } catch (e) { aviso('f-msg', e.message, 'err'); }
+  b.disabled = false; b.textContent = 'Calcular tributos';
+};
+
+function kpi(rotulo, valor, principal) { return el('div', { class: 'kpi' + (principal ? ' main' : '') }, el('div', { class: 'v' }, dinheiro(valor)), el('div', { class: 'l' }, rotulo)); }
+
+function mostrarResultado(r) {
+  const alvo = $('passo-resultado'); limpar(alvo);
+  const t = r.totais;
+  const comIs = r.itens.some((i) => i.impostoSeletivo);
+  const cabecalho = ['Item', 'Situação', 'Base', 'CBS', 'IBS'].concat(comIs ? ['Imp. Seletivo'] : [], ['Total']);
+  const linhas = r.itens.map((i) => el('tr', {},
+    el('td', {}, el('strong', {}, i.descricao), i.mensagens.map((m) => el('div', { class: 'small', style: 'color:var(--err)' }, m)),
+      i.reducaoPercentual ? el('div', { class: 'small mut' }, `Redução de ${pct.format(i.reducaoPercentual)}% na alíquota`) : null),
+    el('td', {}, el('span', { class: 'badge ' + i.situacao }, i.situacaoTexto)),
+    el('td', { class: 'n' }, dinheiro(i.base)), el('td', { class: 'n' }, dinheiro(i.cbs)), el('td', { class: 'n' }, dinheiro(i.ibs)),
+    comIs ? el('td', { class: 'n' }, dinheiro(i.impostoSeletivo)) : null,
+    el('td', { class: 'n' }, el('strong', {}, dinheiro(i.total)))));
+  alvo.append(el('div', { class: 'card' },
+    el('h2', {}, 'Resultado da simulação'),
+    (r.avisos || []).map((a) => el('div', { class: 'msg warn small' }, a)),
+    el('div', { class: 'totals' }, kpi('Total de tributos', t.total, true), kpi('CBS (federal)', t.cbs), kpi('IBS (estados e municípios)', t.ibs), comIs ? kpi('Imposto Seletivo', t.impostoSeletivo) : null),
+    el('div', { class: 'scroll' }, el('table', {}, el('thead', {}, el('tr', {}, cabecalho.map((c, k) => el('th', { class: k >= 2 ? 'n' : '' }, c)))), el('tbody', {}, linhas))),
+    el('div', { class: 'row noprint', style: 'margin-top:16px' },
+      el('button', { onclick: () => window.print() }, 'Imprimir ou salvar em PDF'),
+      el('button', { class: 'sec', onclick: () => { $('passo-resultado').hidden = true; $('passo-form').hidden = false; window.scrollTo(0, 0); } }, 'Fazer outra simulação'))));
+  $('passo-form').hidden = true; alvo.hidden = false; window.scrollTo(0, 0);
+  carregarUsoResumo();
+}
+
+/* ---------- nota (DANFSe) ---------- */
 $('gerar').onclick = async () => {
   const f = $('d-xml').files[0];
-  if (!f) return aviso('d-msg', 'Escolha um arquivo XML', 'err');
-  aviso('d-msg', 'Gerando…');
+  if (!f) return aviso('d-msg', 'Escolha o arquivo XML da nota.', 'err');
+  aviso('d-msg', 'Gerando o PDF…', 'warn'); $('gerar').disabled = true;
   try {
     const q = new URLSearchParams({ stc: $('d-stc').value, canhoto: $('d-canhoto').value });
     const res = await api('/v1/danfse?' + q, { method: 'POST', headers: { 'content-type': 'application/xml' }, body: await f.arrayBuffer() });
-    if (!res.ok) { const d = await res.json().catch(() => ({})); return aviso('d-msg', d?.erro?.mensagem || 'Erro ' + res.status, 'err'); }
-    const a = document.createElement('a'); a.href = URL.createObjectURL(await res.blob()); a.download = 'danfse.pdf'; a.click();
-    aviso('d-msg', 'PDF gerado', 'ok'); atualizarTudo();
+    if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d?.erro?.mensagem || 'Não foi possível gerar o PDF. Confira se o arquivo é uma NFS-e válida.'); }
+    const a = el('a', { href: URL.createObjectURL(await res.blob()), download: 'nota-servico.pdf' }); document.body.append(a); a.click(); a.remove();
+    aviso('d-msg', 'PDF gerado. O download começou.', 'ok');
   } catch (e) { aviso('d-msg', e.message, 'err'); }
+  $('gerar').disabled = false;
 };
 
+/* ---------- histórico ---------- */
+const NOMES_SERVICO = { 'regime-regular': 'Simulação – regime normal', 'simples-nacional': 'Simulação – Simples Nacional', danfse: 'PDF de nota de serviço' };
+async function carregarHistorico() {
+  try {
+    const { eventos } = await json('/history?limite=50');
+    const corpo = $('h-lista'); limpar(corpo); $('h-vazio').hidden = eventos.length > 0;
+    eventos.forEach((e) => corpo.append(el('tr', {},
+      el('td', {}, new Date(e.criadoEm).toLocaleString('pt-BR')), el('td', {}, NOMES_SERVICO[e.servico] || e.servico),
+      el('td', {}, el('span', { class: 'badge ' + (e.status < 400 ? 'calculado' : 'erro') }, e.status < 400 ? 'Concluído' : 'Com problema')))));
+  } catch (e) { /* sessão expirada tratada em api() */ }
+}
+
+/* ---------- conta ---------- */
+async function carregarUsoResumo() {
+  try { const me = await json('/me'); $('quem').textContent = me.nome; } catch { /* ok */ }
+}
+async function carregarConta() {
+  try {
+    const [me, u, k] = await Promise.all([json('/me'), json('/usage'), json('/keys')]);
+    $('c-plano').textContent = `Plano ${NOMES_PLANO[me.plano] || me.plano}`;
+    const alvo = $('uso'); limpar(alvo);
+    for (const [nome, v] of Object.entries(u.uso)) {
+      const p = v.limite ? Math.min(100, (v.usado / v.limite) * 100) : 0;
+      alvo.append(el('div', {}, `${nome === 'calculo' ? 'Simulações' : 'PDFs de nota'} neste mês: ${v.usado.toLocaleString('pt-BR')} de ${v.limite === null ? 'ilimitado' : v.limite.toLocaleString('pt-BR')}`,
+        el('div', { class: 'bar' }, el('i', { style: `width:${p}%` }))));
+    }
+    const corpo = $('k-lista'); limpar(corpo);
+    k.chaves.forEach((c) => corpo.append(el('tr', {}, el('td', {}, c.nome, ' ', el('span', { class: 'mut small' }, c.prefixo + '…')),
+      el('td', {}, c.revogada_em ? 'Revogada' : (c.ultimo_uso_em ? new Date(c.ultimo_uso_em).toLocaleDateString('pt-BR') : 'Nunca usada')),
+      el('td', {}, c.revogada_em ? null : el('button', { class: 'link', onclick: async () => { await api('/keys/' + c.id, { method: 'DELETE' }); carregarConta(); } }, 'Revogar')))));
+  } catch (e) { /* ok */ }
+}
 $('k-criar').onclick = async () => {
   try {
-    const r = await json('/keys', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ nome: $('k-nome').value }) });
-    aviso('k-msg', 'Chave (copie agora, não será exibida de novo): ' + r.chave, 'ok'); $('k-nome').value = ''; atualizarTudo();
+    const r = await post('/keys', { nome: $('k-nome').value });
+    const n = $('k-msg'); limpar(n);
+    n.append(el('div', { class: 'msg ok' }, 'Copie a chave agora. Ela não será mostrada de novo:', el('code', { class: 'key' }, r.chave)));
+    $('k-nome').value = ''; carregarConta();
   } catch (e) { aviso('k-msg', e.message, 'err'); }
 };
 
-mostrarExemplo(); render();
+/* ---------- início ---------- */
+function iniciarApp() {
+  carregarUsoResumo();
+  if (!$('f-data').value) $('f-data').value = hoje();
+  carregarUfs(); aplicarRegime(); abrirAba('simular');
+}
+modoEntrada(); render();
 </script>
 </body>
 </html>

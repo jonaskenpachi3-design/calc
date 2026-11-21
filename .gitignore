@@ -1,0 +1,4 @@
+vendor/
+.env
+gateway/data/
+node_modules/

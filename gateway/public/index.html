@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calculadora RTC</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --tx:#1b2430; --mut:#5d6b7c; --bd:#dde2e9; --ac:#0b5cab; --ac-tx:#fff; --err:#b42318; --ok:#067647; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg:#10151c; --card:#18202a; --tx:#e7ecf2; --mut:#93a1b3; --bd:#2a3644; --ac:#4c9aff; --ac-tx:#06121f; --err:#ff8a80; --ok:#5ed39a; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--tx); font:15px/1.5 system-ui, sans-serif; }
+  header { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--bd); background:var(--card); }
+  header h1 { font-size:17px; margin:0; }
+  main { max-width:960px; margin:0 auto; padding:16px; display:grid; gap:16px; }
+  section { background:var(--card); border:1px solid var(--bd); border-radius:10px; padding:16px; }
+  h2 { font-size:16px; margin:0 0 12px; }
+  label { display:block; font-size:13px; color:var(--mut); margin:8px 0 4px; }
+  input, select, textarea { width:100%; padding:8px 10px; border:1px solid var(--bd); border-radius:6px; background:var(--bg); color:var(--tx); font:inherit; }
+  textarea { font:13px/1.4 ui-monospace, monospace; min-height:180px; }
+  button { padding:8px 14px; border:0; border-radius:6px; background:var(--ac); color:var(--ac-tx); font:inherit; cursor:pointer; }
+  button.sec { background:transparent; color:var(--ac); border:1px solid var(--bd); }
+  button:disabled { opacity:.5; cursor:default; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:end; }
+  .row > * { flex:1 1 160px; }
+  .row > button { flex:0 0 auto; }
+  pre { background:var(--bg); border:1px solid var(--bd); border-radius:6px; padding:10px; overflow:auto; max-height:360px; font-size:12.5px; }
+  table { width:100%; border-collapse:collapse; font-size:13.5px; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--bd); }
+  .bar { height:8px; background:var(--bd); border-radius:4px; overflow:hidden; }
+  .bar > i { display:block; height:100%; background:var(--ac); }
+  .msg { font-size:13px; margin-top:8px; min-height:1.2em; }
+  .msg.err { color:var(--err); } .msg.ok { color:var(--ok); }
+  .tabs { display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap; }
+  .tabs button { background:transparent; color:var(--tx); border:1px solid var(--bd); }
+  .tabs button[aria-pressed="true"] { background:var(--ac); color:var(--ac-tx); border-color:var(--ac); }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Calculadora RTC</h1>
+  <div id="sessao" hidden><span id="quem"></span> <button class="sec" id="sair">Sair</button></div>
+</header>
+<main>
+  <section id="auth">
+    <h2>Entrar</h2>
+    <div class="row">
+      <div><label for="a-nome">Nome da empresa (só no cadastro)</label><input id="a-nome" autocomplete="organization"></div>
+      <div><label for="a-email">E-mail</label><input id="a-email" type="email" autocomplete="email"></div>
+      <div><label for="a-senha">Senha (mín. 10 caracteres)</label><input id="a-senha" type="password" autocomplete="current-password"></div>
+    </div>
+    <div class="row" style="margin-top:10px"><button id="entrar">Entrar</button><button class="sec" id="cadastrar">Criar conta</button></div>
+    <div class="msg" id="a-msg"></div>
+  </section>
+
+  <div id="app" hidden style="display:grid;gap:16px">
+    <section>
+      <h2>Uso do mês</h2>
+      <div id="uso"></div>
+    </section>
+
+    <section>
+      <h2>Calcular tributos</h2>
+      <div class="tabs" role="group" aria-label="Regime">
+        <button data-regime="regular" aria-pressed="true">Regime regular</button>
+        <button data-regime="simples" aria-pressed="false">Simples Nacional</button>
+      </div>
+      <label for="c-json">Operação (JSON)</label>
+      <textarea id="c-json" spellcheck="false"></textarea>
+      <div class="row" style="margin-top:10px"><button id="calcular">Calcular</button></div>
+      <div class="msg" id="c-msg"></div>
+      <pre id="c-out" hidden></pre>
+    </section>
+
+    <section>
+      <h2>Gerar DANFSe (PDF)</h2>
+      <div class="row">
+        <div><label for="d-xml">XML da NFS-e</label><input id="d-xml" type="file" accept=".xml,application/xml,text/xml"></div>
+        <div><label for="d-stc">Situação</label><select id="d-stc"><option value="0">Válida</option><option value="1">Substituída</option><option value="2">Cancelada</option></select></div>
+        <div><label for="d-canhoto">Canhoto</label><select id="d-canhoto"><option value="true">Com canhoto</option><option value="false">Sem canhoto</option></select></div>
+        <button id="gerar">Gerar PDF</button>
+      </div>
+      <div class="msg" id="d-msg"></div>
+    </section>
+
+    <section>
+      <h2>Chaves de API</h2>
+      <div class="row"><div><label for="k-nome">Nome da nova chave</label><input id="k-nome" placeholder="ex.: ERP produção"></div><button id="k-criar">Criar</button></div>
+      <div class="msg" id="k-msg"></div>
+      <table><thead><tr><th>Nome</th><th>Prefixo</th><th>Último uso</th><th></th></tr></thead><tbody id="k-lista"></tbody></table>
+    </section>
+
+    <section>
+      <h2>Histórico recente</h2>
+      <table><thead><tr><th>Quando</th><th>Serviço</th><th>Status</th><th>ms</th><th>Operação</th></tr></thead><tbody id="h-lista"></tbody></table>
+    </section>
+  </div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+let token = null;
+try { token = sessionStorage.getItem('rtc_token'); } catch {}
+
+const EXEMPLOS = {
+  regular: {
+    id: 'op-001', versao: '1.0.0', dhFatoGerador: '2027-03-10T10:00:00-03:00', municipio: 4314902, uf: 'RS',
+    itens: [{ numero: 1, nbs: '122011200', cst: '200', cClassTrib: '200028', baseCalculo: 1200.0,
+      aliquotasNominais: { cbs: 8.8, ibsEstadual: 0.05, ibsMunicipal: 0.05 } }],
+  },
+  simples: {
+    id: 'op-002', versao: '3.0.0', data: '2027-03-15', tpDoc: '55', CRT: '1',
+    aliquotasEfetivas: {},
+    itens: [{ numero: 1, cAtivSN: '01', cClassTrib: '000001', ncm: '22030000', baseCalculo: '10000.00', valorImpostoSeletivo: '0.00' }],
+  },
+};
+let regime = 'regular';
+const mostrarExemplo = () => { $('c-json').value = JSON.stringify(EXEMPLOS[regime], null, 2); };
+
+function aviso(id, texto, tipo) { const e = $(id); e.textContent = texto; e.className = 'msg ' + (tipo || ''); }
+
+async function api(caminho, opcoes = {}) {
+  const res = await fetch(caminho, { ...opcoes, headers: { ...(opcoes.headers || {}), ...(token ? { authorization: 'Bearer ' + token } : {}) } });
+  if (res.status === 401 && token) { sair(); }
+  return res;
+}
+async function json(caminho, opcoes) {
+  const res = await api(caminho, opcoes);
+  const dados = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(dados?.erro?.mensagem || 'Erro ' + res.status);
+  return dados;
+}
+
+function sair() { token = null; try { sessionStorage.removeItem('rtc_token'); } catch {} render(); }
+
+function render() {
+  $('auth').hidden = !!token; $('app').hidden = !token; $('sessao').hidden = !token;
+  if (token) atualizarTudo();
+}
+
+async function autenticar(rota) {
+  try {
+    const corpo = { email: $('a-email').value, senha: $('a-senha').value, nome: $('a-nome').value };
+    const r = await json(rota, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(corpo) });
+    token = r.token; try { sessionStorage.setItem('rtc_token', token); } catch {}
+    $('a-senha').value = ''; aviso('a-msg', ''); render();
+  } catch (e) { aviso('a-msg', e.message, 'err'); }
+}
+$('entrar').onclick = () => autenticar('/auth/login');
+$('cadastrar').onclick = () => autenticar('/auth/register');
+$('sair').onclick = sair;
+
+async function atualizarTudo() {
+  try {
+    const me = await json('/me'); $('quem').textContent = me.nome + ' · plano ' + me.plano;
+    const u = await json('/usage');
+    $('uso').replaceChildren(...Object.entries(u.uso).map(([nome, v]) => {
+      const d = document.createElement('div');
+      const pct = v.limite ? Math.min(100, (v.usado / v.limite) * 100) : 0;
+      d.innerHTML = '<div></div><div class="bar"><i></i></div>';
+      d.firstChild.textContent = (nome === 'calculo' ? 'Cálculos' : 'DANFSe') + ': ' + v.usado + ' / ' + (v.limite ?? 'ilimitado');
+      d.querySelector('i').style.width = pct + '%';
+      d.style.marginBottom = '10px'; return d;
+    }));
+    const k = await json('/keys');
+    $('k-lista').replaceChildren(...k.chaves.map((c) => {
+      const tr = document.createElement('tr');
+      [c.nome, c.prefixo + '…', c.revogada_em ? 'revogada' : (c.ultimo_uso_em || '—')].forEach((t) => { const td = document.createElement('td'); td.textContent = t; tr.append(td); });
+      const td = document.createElement('td');
+      if (!c.revogada_em) { const b = document.createElement('button'); b.className = 'sec'; b.textContent = 'Revogar';
+        b.onclick = async () => { await api('/keys/' + c.id, { method: 'DELETE' }); atualizarTudo(); }; td.append(b); }
+      tr.append(td); return tr;
+    }));
+    const h = await json('/history?limite=20');
+    $('h-lista').replaceChildren(...h.eventos.map((e) => {
+      const tr = document.createElement('tr');
+      [e.criadoEm.replace('T', ' ').slice(0, 19), e.servico, e.status, e.duracaoMs, e.operacaoId || '—'].forEach((t) => { const td = document.createElement('td'); td.textContent = t; tr.append(td); });
+      return tr;
+    }));
+  } catch (e) { /* sessão expirada já tratada em api() */ }
+}
+
+document.querySelectorAll('.tabs button').forEach((b) => b.onclick = () => {
+  regime = b.dataset.regime;
+  document.querySelectorAll('.tabs button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+  mostrarExemplo();
+});
+
+$('calcular').onclick = async () => {
+  let operacao;
+  try { operacao = JSON.parse($('c-json').value); } catch { return aviso('c-msg', 'JSON inválido', 'err'); }
+  aviso('c-msg', 'Calculando…');
+  try {
+    const res = await api('/v1/calculo', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ regime, operacao }) });
+    const dados = await res.json().catch(() => ({}));
+    $('c-out').hidden = false; $('c-out').textContent = JSON.stringify(dados, null, 2);
+    aviso('c-msg', res.ok ? 'Concluído' : (dados?.erro?.mensagem || 'Erro ' + res.status), res.ok ? 'ok' : 'err');
+    atualizarTudo();
+  } catch (e) { aviso('c-msg', e.message, 'err'); }
+};
+
+$('gerar').onclick = async () => {
+  const f = $('d-xml').files[0];
+  if (!f) return aviso('d-msg', 'Escolha um arquivo XML', 'err');
+  aviso('d-msg', 'Gerando…');
+  try {
+    const q = new URLSearchParams({ stc: $('d-stc').value, canhoto: $('d-canhoto').value });
+    const res = await api('/v1/danfse?' + q, { method: 'POST', headers: { 'content-type': 'application/xml' }, body: await f.arrayBuffer() });
+    if (!res.ok) { const d = await res.json().catch(() => ({})); return aviso('d-msg', d?.erro?.mensagem || 'Erro ' + res.status, 'err'); }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(await res.blob()); a.download = 'danfse.pdf'; a.click();
+    aviso('d-msg', 'PDF gerado', 'ok'); atualizarTudo();
+  } catch (e) { aviso('d-msg', e.message, 'err'); }
+};
+
+$('k-criar').onclick = async () => {
+  try {
+    const r = await json('/keys', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ nome: $('k-nome').value }) });
+    aviso('k-msg', 'Chave (copie agora, não será exibida de novo): ' + r.chave, 'ok'); $('k-nome').value = ''; atualizarTudo();
+  } catch (e) { aviso('k-msg', e.message, 'err'); }
+};
+
+mostrarExemplo(); render();
+</script>
+</body>
+</html>

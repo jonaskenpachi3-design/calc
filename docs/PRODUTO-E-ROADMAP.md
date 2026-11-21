@@ -45,6 +45,6 @@ Estas são ideias de mercado, não funcionalidades:
 
 1. Validar com as calculadoras reais e corrigir o que a Receita rejeitar.
 2. Fixar versões dos repositórios oficiais e limitar memória dos contêineres.
-3. Busca de produto por nome e lista de erros de cadastro (auditoria).
-4. Processamento em lote com comparativo e relatório PDF com a marca do escritório.
+3. Busca de produto por nome e correção de erros na própria tela (auditoria).
+4. Lote com XML, comparativo (modelo atual e CBS/IBS; Simples e regime regular) e relatório PDF com a marca do escritório. O lote por CSV já existe.
 5. Cobrança, recuperação de senha, PostgreSQL e monitoramento (pré-requisitos para vender com SLA).

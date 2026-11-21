@@ -114,10 +114,11 @@ Fluxo completo para o cliente:
 1. Criar a conta (nome da empresa, e-mail, senha de 10 caracteres ou mais) e entrar. A primeira tela é a **Visão geral** (uso do mês e atividade recente).
 2. **Simular tributos:** escolher “regime normal” ou “Simples Nacional”, preencher a operação e os itens, clicar em **Calcular tributos**.
 3. **PDF da nota de serviço:** enviar o XML da NFS-e e baixar o DANFSe.
-4. **Minhas simulações:** consultar o histórico.
-5. **Minha conta:** ver plano, uso do mês e (escondidas) chaves de API para integração.
+4. **Simulador em lote:** baixar a planilha modelo, preencher uma linha por item, enviar o CSV (até 500 operações) e ver totais, problemas por linha e o resultado para baixar.
+5. **Minhas simulações:** consultar o histórico.
+6. **Minha conta:** ver plano, uso do mês e (escondidas) chaves de API para integração.
 
-A tela segue o protótipo "Nexo Fiscal": menu lateral, painel de visão geral com o uso real da conta, cartões e formulários guiados. As funções do protótipo que ainda não existem (carteira de CNPJs, lote, auditoria, comparativo) aparecem no menu como "Em breve", sem dados de mentira. Para trocar o nome da marca, edite `gateway/public/index.html` (busque por "nexo fiscal").
+A tela segue o protótipo "Nexo Fiscal": menu lateral, painel de visão geral com o uso real da conta, cartões e formulários guiados. As funções do protótipo que ainda não existem (carteira de CNPJs, auditoria completa, comparativo) aparecem no menu como "Em breve", sem dados de mentira. Para trocar o nome da marca, edite `gateway/public/index.html` (busque por "nexo fiscal").
 
 O passo a passo para o usuário final está no manual do usuário, entregue junto com este projeto.
 
@@ -149,6 +150,7 @@ Autenticação: `Authorization: Bearer <token de sessão ou chave rtc_...>`. As 
 | `POST /v1/simulacoes/regime-normal` | Formulário simplificado, resultado legível |
 | `POST /v1/simulacoes/simples-nacional` | Idem, Simples Nacional |
 | `POST /v1/regime-regular/calculo`, `/v1/simples-nacional/calculo[-informado]`, `/v1/calculo` | Contrato oficial, repassado como veio |
+| `POST /v1/simulacoes/lote` | Várias simulações de uma vez (`regime` e `operacoes`, até 200 por chamada; cada operação gasta uma unidade da cota) |
 | `POST /v1/danfse?stc=0\|1\|2&canhoto=true\|false` (corpo XML) | PDF da nota |
 | `GET /v1/dados/...`, `/v1/tabelas/...` | Tabelas oficiais (UFs, municípios, NCM, NBS, classificações, alíquotas). Cache de 5 minutos; a maioria exige `?data=AAAA-MM-DD` |
 | `GET /v1/simples-nacional/atividades?data=...&tpDoc=...` | Atividades do Simples |
@@ -163,7 +165,7 @@ Códigos úteis: 401 (sem login), 429 (limite por minuto ou cota do plano), 400 
 
 ```bash
 cd gateway
-npm test      # 18 testes, sem dependências
+npm test      # 20 testes, sem dependências
 ```
 
 Os testes usam calculadoras falsas que respondem no formato documentado pela Receita. **Eles não substituem a validação com as calculadoras reais.**
@@ -210,7 +212,7 @@ Leia antes de vender.
 - **Imposto Seletivo e compra governamental** não estão no formulário.
 - **Sem cobrança, sem recuperação de senha, sem confirmação de e-mail.**
 - **SQLite:** serve para uma instância. Para escalar, troque por PostgreSQL.
-- **Sem lote, sem relatório com marca do escritório:** veja o [roadmap](docs/PRODUTO-E-ROADMAP.md).
+- **Lote só por CSV**, sem XML, sem comparação com o modelo atual de tributos e sem relatório com a marca do escritório: veja o [roadmap](docs/PRODUTO-E-ROADMAP.md).
 
 ## Licença das calculadoras oficiais
 

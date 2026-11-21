@@ -26,6 +26,7 @@ export function loadConfig(env = process.env) {
       ibsMunicipal: Number(env.ALIQUOTA_IBS_MUNICIPAL ?? 0.05),
     },
     maxJsonBytes: int(env.MAX_JSON_BYTES, 2 * 1024 * 1024),
+    maxOperacoesLote: int(env.MAX_OPERACOES_LOTE, 200),
     maxXmlBytes: int(env.MAX_XML_BYTES, 5 * 1024 * 1024),
     rateLimitPorMinuto: int(env.RATE_LIMIT_PER_MINUTE, 120),
     // Dados fiscais são sensíveis: por padrão só metadados vão para o histórico.

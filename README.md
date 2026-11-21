@@ -105,7 +105,7 @@ Variáveis no arquivo `.env` (nunca vai para o git):
 | `STORE_PAYLOADS` | `true` guarda o formulário preenchido no histórico. Padrão `false`, por serem dados fiscais. |
 | `ALIQUOTA_CBS`, `ALIQUOTA_IBS_ESTADUAL`, `ALIQUOTA_IBS_MUNICIPAL` | Alíquotas nominais (%) exigidas pela calculadora para datas a partir de 2027. Padrão 8,8 / 0,05 / 0,05 (valores do exemplo de teste da Receita). **Confirme antes de mostrar a clientes.** |
 
-Outras variáveis do gateway (valores padrão em `gateway/src/config.js`): `PORT`, `DB_PATH`, `SESSION_TTL_SECONDS`, `UPSTREAM_REGIME_REGULAR`, `UPSTREAM_SIMPLES_NACIONAL`, `UPSTREAM_DANFSE`, limites de tamanho e `RATE_LIMIT_PER_MINUTE`.
+Outras variáveis do gateway (valores padrão em `gateway/src/config.js`): `PORT`, `DB_PATH`, `SESSION_TTL_SECONDS`, `UPSTREAM_REGIME_REGULAR`, `UPSTREAM_SIMPLES_NACIONAL`, `UPSTREAM_DANFSE`, limites de tamanho, `MAX_OPERACOES_LOTE` (padrão 200 por chamada) e `RATE_LIMIT_PER_MINUTE`.
 
 ## Uso
 

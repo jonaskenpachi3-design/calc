@@ -21,15 +21,15 @@ Legenda: ✅ existe · 🟡 parcial · 🗓️ planejado · ⛔ fora do escopo a
 | API única e normalizada | 🟡 | Ver acima. O formulário simplificado e o resultado legível já existem. |
 | Atualização garantida e versionamento | 🗓️ | Depende do pipeline de versões do item 1. |
 | Histórico e auditoria | 🟡 | Há histórico por conta. Faltam busca, memória de cálculo completa (o formulário só é guardado com `STORE_PAYLOADS=true`) e exportação de relatório. |
-| Processamento em lote (XML, CSV) | 🗓️ | Hoje a simulação é uma operação por vez. |
+| Processamento em lote (XML, CSV) | 🟡 | Planilha CSV de até 500 operações, uma regime por vez, com totais, lista de problemas por linha e resultado em CSV (`POST /v1/simulacoes/lote`). Faltam o envio de XMLs de NF-e/NFS-e e o processamento em segundo plano para lotes maiores. |
 | SLA e alta disponibilidade | 🗓️ | SQLite e uma instância. Para SLA: PostgreSQL, mais de uma instância do gateway, monitoramento e backups. |
 
 ## 3. Telas que vendem
 
 | Tela | Status | Situação real |
 |---|---|---|
-| Simulador de impacto em lote (comparar o modelo atual com CBS/IBS e comparar Simples com regime regular) | 🗓️ | É o carro-chefe sugerido. Exige leitura de XML/CSV, cálculo do modelo atual e o uso dos dois motores sobre os mesmos dados. |
-| Auditoria de cadastro (NCM / classificação) | 🟡 | Cada item já mostra erros da calculadora em português. Falta a lista consolidada em vermelho, busca por nome do produto e correção com recálculo. |
+| Simulador de impacto em lote (comparar o modelo atual com CBS/IBS e comparar Simples com regime regular) | 🟡 | O lote por CSV já calcula CBS e IBS de muitas operações. Falta a comparação: o modelo atual (ICMS, ISS, PIS, COFINS) não é calculado por nenhum dos motores da Receita, e comparar Simples com regime regular exige rodar os dois sobre os mesmos dados. |
+| Auditoria de cadastro (NCM / classificação) | 🟡 | O lote já lista, por linha da planilha, cada item que a calculadora recusou, com a mensagem em português. Faltam busca por nome do produto e correção na própria tela com recálculo. |
 | DANFSe em lote com logotipo | 🟡 | Gera o PDF de uma nota por vez. Faltam lote e logotipo do cliente. |
 | Relatório “white-label” em PDF com a logo do escritório | 🗓️ | Hoje o resultado pode ser impresso pelo navegador, sem marca própria nem gráficos. |
 

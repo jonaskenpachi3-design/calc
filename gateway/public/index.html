@@ -136,6 +136,14 @@
   details { margin:8px 0; } summary { cursor:pointer; font-weight:700; min-height:32px; color:var(--navy); }
   code.key { display:block; word-break:break-all; padding:10px; background:#fff; border:1px solid var(--bd); border-radius:8px; margin-top:6px; }
 
+  .drop { border:1.5px dashed #b9cbd7; border-radius:14px; background:#f9fcfd; padding:28px 20px; text-align:center; }
+  .drop.over { border-color:var(--teal); background:#effaf7; }
+  .drop h3 { margin:0 0 4px; }
+  .steps { margin:0 0 14px; padding-left:20px; } .steps li { margin:4px 0; }
+  .bar-wrap { height:8px; background:#edf1f4; border-radius:99px; overflow:hidden; margin:10px 0; }
+  .prob { display:flex; gap:11px; padding:12px 0; border-bottom:1px solid #edf1f5; }
+  .prob:last-child { border-bottom:0; }
+  .prob .s { width:28px; height:28px; border-radius:9px; background:var(--red-soft); color:var(--red); display:grid; place-items:center; font-weight:800; flex:none; }
   @media (max-width:1050px) { .login-wrap { grid-template-columns:1fr; } .login-art { min-height:260px; padding:30px; } .login-form { padding:30px; } .two { grid-template-columns:1fr; } }
   @media (max-width:860px) {
     .app { display:block; }
@@ -202,13 +210,13 @@
       <button class="nav-item" data-aba="inicio" aria-selected="true"><span class="nav-num">01</span><span><div class="nav-text">Visão geral</div><div class="nav-cap">Resumo do seu uso</div></span></button>
       <button class="nav-item" data-aba="simular" aria-selected="false"><span class="nav-num">02</span><span><div class="nav-text">Simular tributos</div><div class="nav-cap">CBS e IBS por item</div></span></button>
       <button class="nav-item" data-aba="nota" aria-selected="false"><span class="nav-num">03</span><span><div class="nav-text">PDF da nota (DANFSe)</div><div class="nav-cap">A partir do XML</div></span></button>
-      <button class="nav-item" data-aba="historico" aria-selected="false"><span class="nav-num">04</span><span><div class="nav-text">Minhas simulações</div><div class="nav-cap">Histórico</div></span></button>
-      <button class="nav-item" data-aba="conta" aria-selected="false"><span class="nav-num">05</span><span><div class="nav-text">Minha conta</div><div class="nav-cap">Plano e integração</div></span></button>
+      <button class="nav-item" data-aba="lote" aria-selected="false"><span class="nav-num">04</span><span><div class="nav-text">Simulador em lote</div><div class="nav-cap">Planilha CSV</div></span></button>
+      <button class="nav-item" data-aba="historico" aria-selected="false"><span class="nav-num">05</span><span><div class="nav-text">Minhas simulações</div><div class="nav-cap">Histórico</div></span></button>
+      <button class="nav-item" data-aba="conta" aria-selected="false"><span class="nav-num">06</span><span><div class="nav-text">Minha conta</div><div class="nav-cap">Plano e integração</div></span></button>
     </nav>
     <div class="side-label" style="margin-top:6px">Em breve</div>
     <nav class="nav" aria-label="Funções em desenvolvimento">
       <button class="nav-item" disabled title="Em desenvolvimento"><span class="nav-num">·</span><span class="nav-text">Carteira de CNPJs</span></button>
-      <button class="nav-item" disabled title="Em desenvolvimento"><span class="nav-num">·</span><span class="nav-text">Simulador em lote</span></button>
       <button class="nav-item" disabled title="Em desenvolvimento"><span class="nav-num">·</span><span class="nav-text">Auditoria</span></button>
       <button class="nav-item" disabled title="Em desenvolvimento"><span class="nav-num">·</span><span class="nav-text">Comparativo e relatório</span></button>
     </nav>
@@ -235,6 +243,7 @@
             <div class="actions">
               <button data-ir="simular" class="sec">＋ Nova simulação</button>
               <button data-ir="nota" class="sec">▧ Gerar PDF de uma nota</button>
+              <button data-ir="lote" class="sec">⇧ Simular uma planilha (lote)</button>
               <button data-ir="historico" class="sec">▤ Ver minhas simulações</button>
             </div>
           </div>
@@ -295,6 +304,34 @@
           <div id="d-msg" role="alert"></div>
           <p class="mut small" style="margin-top:12px">O arquivo e o PDF não ficam guardados no sistema.</p>
         </div>
+      </div>
+
+      <!-- Lote -->
+      <div id="aba-lote" hidden>
+        <div class="page-head"><div class="eyebrow">Processamento em lote</div><h1>Simulador em lote</h1><p>Suba uma planilha com várias operações e veja o total de CBS e IBS, além dos itens que precisam de correção.</p></div>
+        <div id="lote-form" class="card">
+          <h2>1. Para quem é o lote?</h2>
+          <div class="choice" id="lote-regime">
+            <button data-regime="regime-normal" aria-pressed="true"><span><strong>Empresa no regime normal</strong><span class="mut small">Lucro presumido ou lucro real</span></span></button>
+            <button data-regime="simples-nacional" aria-pressed="false"><span><strong>Empresa do Simples Nacional</strong><span class="mut small">ME, EPP e demais optantes</span></span></button>
+          </div>
+          <h2>2. Baixe o modelo e preencha</h2>
+          <ol class="steps">
+            <li>Baixe a planilha modelo e abra no Excel ou no Google Planilhas.</li>
+            <li>Preencha uma linha por item. Linhas com o mesmo <strong>documento</strong> formam uma única operação.</li>
+            <li>Salve como <strong>CSV</strong> e envie abaixo (até 500 operações).</li>
+          </ol>
+          <div class="row" style="margin-bottom:18px"><button class="sec" id="lote-modelo">⇩ Baixar planilha modelo</button></div>
+          <h2>3. Envie a planilha</h2>
+          <div class="drop" id="lote-drop">
+            <h3>Arraste o arquivo CSV para cá</h3>
+            <p class="mut small">ou escolha no seu computador</p>
+            <input id="lote-arquivo" type="file" accept=".csv,text/csv,text/plain">
+          </div>
+          <div id="lote-msg" role="alert"></div>
+          <div id="lote-previa"></div>
+        </div>
+        <div id="lote-resultado" hidden></div>
       </div>
 
       <!-- Histórico -->
@@ -414,7 +451,7 @@ function render() {
 }
 
 /* ---------- abas ---------- */
-const TITULOS = { inicio: 'Visão geral', simular: 'Simular tributos', nota: 'PDF da nota (DANFSe)', historico: 'Minhas simulações', conta: 'Minha conta' };
+const TITULOS = { inicio: 'Visão geral', simular: 'Simular tributos', nota: 'PDF da nota (DANFSe)', lote: 'Simulador em lote', historico: 'Minhas simulações', conta: 'Minha conta' };
 function abrirAba(nome) {
   document.querySelectorAll('.nav-item[data-aba]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.aba === nome)));
   for (const a of Object.keys(TITULOS)) $('aba-' + a).hidden = a !== nome;
@@ -559,6 +596,198 @@ function mostrarResultado(r) {
       el('button', { class: 'sec', onclick: () => { $('passo-resultado').hidden = true; $('passo-form').hidden = false; window.scrollTo(0, 0); } }, 'Fazer outra simulação'))));
   $('passo-form').hidden = true; alvo.hidden = false; window.scrollTo(0, 0);
   carregarUsoResumo();
+}
+
+
+/* ---------- lote (planilha CSV) ---------- */
+let loteRegime = 'regime-normal';
+let loteOps = [];            // operações prontas para enviar
+let loteProblemasLeitura = []; // linhas que não deu para ler
+const semAcento = (t) => String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+
+const COLUNAS = {
+  'regime-normal': ['documento', 'data', 'uf', 'municipio', 'tipo', 'codigo', 'classificacao', 'valor', 'descricao'],
+  'simples-nacional': ['documento', 'data', 'tipo_nota', 'anexo', 'aliquota_cbs', 'aliquota_ibs', 'ultrapassou_sublimite', 'tipo', 'codigo', 'classificacao', 'atividade', 'valor', 'descricao'],
+};
+const EXEMPLOS = {
+  'regime-normal': [
+    ['NF-001', '10/03/2027', 'AC', 'Rio Branco', 'servico', '122011200', '200028', '1200,00', 'Mensalidade escolar'],
+    ['NF-002', '10/03/2027', 'AC', 'Rio Branco', 'produto', '02013000', '000001', '80,00', 'Carne'],
+  ],
+  'simples-nacional': [
+    ['NF-001', '10/03/2027', 'nfe', 'I', '1,1612', '0,0129', 'nao', 'produto', '22030000', '000001', '01', '10000,00', 'Cerveja'],
+  ],
+};
+
+function lerCsv(texto) {
+  const t = texto.replace(/^﻿/, '');
+  const primeira = t.split(/\r?\n/, 1)[0] || '';
+  const sep = (primeira.match(/;/g) || []).length >= (primeira.match(/,/g) || []).length ? ';' : ',';
+  const linhas = []; let linha = []; let campo = ''; let aspas = false;
+  for (let i = 0; i < t.length; i++) {
+    const c = t[i];
+    if (aspas) { if (c === '"') { if (t[i + 1] === '"') { campo += '"'; i++; } else aspas = false; } else campo += c; }
+    else if (c === '"') aspas = true;
+    else if (c === sep) { linha.push(campo); campo = ''; }
+    else if (c === '\n' || c === '\r') { if (c === '\r' && t[i + 1] === '\n') i++; linha.push(campo); linhas.push(linha); linha = []; campo = ''; }
+    else campo += c;
+  }
+  if (campo !== '' || linha.length) { linha.push(campo); linhas.push(linha); }
+  return linhas;
+}
+
+function dataIso(v) {
+  const t = String(v || '').trim();
+  let m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t); if (m) return t;
+  m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(t); if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  return null;
+}
+
+const munCache = {};
+async function codigoMunicipio(uf, nome) {
+  const n = String(nome || '').trim();
+  if (/^\d{7}$/.test(n)) return n;
+  if (!munCache[uf]) { try { munCache[uf] = lista(await json('/v1/dados/ufs/municipios?siglaUf=' + encodeURIComponent(uf))); } catch { munCache[uf] = []; } }
+  const achado = munCache[uf].find((m) => semAcento(m.nome) === semAcento(n));
+  return achado ? String(achado.codigo) : null;
+}
+
+async function prepararLote(texto) {
+  const linhas = lerCsv(texto).filter((l) => l.some((c) => String(c).trim() !== ''));
+  if (linhas.length < 2) throw new Error('A planilha está vazia ou só tem o cabeçalho.');
+  const cab = linhas[0].map((c) => semAcento(c).replace(/\s+/g, '_'));
+  const faltando = COLUNAS[loteRegime].filter((c) => !['documento', 'descricao', 'ultrapassou_sublimite'].includes(c) && !cab.includes(c));
+  if (faltando.length) throw new Error('Faltam colunas na planilha: ' + faltando.join(', ') + '. Baixe o modelo para conferir.');
+  const idx = Object.fromEntries(cab.map((c, i) => [c, i]));
+  const v = (l, c) => (idx[c] === undefined ? '' : String(l[idx[c]] ?? '').trim());
+
+  const grupos = []; const mapa = new Map(); const problemas = [];
+  for (let i = 1; i < linhas.length; i++) {
+    const l = linhas[i]; const numero = i + 1; // 1 = cabeçalho
+    const doc = v(l, 'documento');
+    const tipoTxt = semAcento(v(l, 'tipo'));
+    const tipo = tipoTxt.startsWith('serv') ? 'servico' : tipoTxt.startsWith('prod') ? 'produto' : null;
+    const data = dataIso(v(l, 'data'));
+    if (!tipo) { problemas.push({ linha: numero, documento: doc, mensagem: 'Tipo deve ser "produto" ou "servico".' }); continue; }
+    if (!data) { problemas.push({ linha: numero, documento: doc, mensagem: 'Data inválida. Use dia/mês/ano, por exemplo 10/03/2027.' }); continue; }
+    const item = { tipo, descricao: v(l, 'descricao'), codigo: v(l, 'codigo'), classificacao: v(l, 'classificacao'), atividade: v(l, 'atividade'), valor: v(l, 'valor') };
+    const chave = doc ? `${doc}|${data}` : `linha-${numero}`;
+    let g = mapa.get(chave);
+    if (!g) {
+      g = { documento: doc || `Linha ${numero}`, linhas: [], itensLinhas: [], entrada: { data, itens: [] } };
+      if (loteRegime === 'regime-normal') {
+        const uf = v(l, 'uf').toUpperCase();
+        const cod = await codigoMunicipio(uf, v(l, 'municipio'));
+        if (!uf || !cod) { problemas.push({ linha: numero, documento: doc, mensagem: `Município "${v(l, 'municipio')}" não encontrado em ${uf || 'estado não informado'}.` }); continue; }
+        g.entrada.uf = uf; g.entrada.municipio = cod;
+      } else {
+        g.entrada.documento = semAcento(v(l, 'tipo_nota'));
+        g.entrada.aliquotas = { anexo: v(l, 'anexo').toUpperCase(), cbs: v(l, 'aliquota_cbs'), ibs: v(l, 'aliquota_ibs'), impedimentoSublimite: ['sim', 's', 'true', '1'].includes(semAcento(v(l, 'ultrapassou_sublimite'))) };
+      }
+      mapa.set(chave, g); grupos.push(g);
+    }
+    g.linhas.push(numero); g.entrada.itens.push(item);
+  }
+  if (grupos.length > 500) throw new Error('A planilha tem mais de 500 operações. Divida em arquivos menores.');
+  return { grupos, problemas };
+}
+
+$('lote-regime').querySelectorAll('button').forEach((b) => { b.onclick = () => {
+  loteRegime = b.dataset.regime;
+  $('lote-regime').querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+  loteOps = []; limpar($('lote-previa')); aviso('lote-msg');
+}; });
+
+$('lote-modelo').onclick = () => {
+  const linhas = [COLUNAS[loteRegime], ...EXEMPLOS[loteRegime]].map((l) => l.join(';')).join('\r\n');
+  const a = el('a', { href: URL.createObjectURL(new Blob(['﻿' + linhas + '\r\n'], { type: 'text/csv;charset=utf-8' })), download: `modelo-lote-${loteRegime}.csv` });
+  document.body.append(a); a.click(); a.remove();
+};
+
+async function receberArquivo(f) {
+  aviso('lote-msg'); limpar($('lote-previa')); loteOps = [];
+  if (!f) return;
+  if (f.size > 2 * 1024 * 1024) return aviso('lote-msg', 'O arquivo tem mais de 2 MB. Divida em partes.', 'err');
+  aviso('lote-msg', 'Lendo a planilha…', 'warn');
+  try {
+    const { grupos, problemas } = await prepararLote(await f.text());
+    loteOps = grupos; loteProblemasLeitura = problemas; aviso('lote-msg');
+    const p = $('lote-previa');
+    p.append(el('div', { class: 'msg ok' }, `Planilha lida: ${grupos.length} operação(ões) pronta(s) para simular.`));
+    if (problemas.length) p.append(el('div', { class: 'msg warn small' }, `${problemas.length} linha(s) não puderam ser lidas e ficarão fora da simulação. Elas aparecerão na lista de problemas.`));
+    if (grupos.length) p.append(el('div', { class: 'row', style: 'margin-top:8px' }, el('button', { id: 'lote-enviar', onclick: processarLote }, `Simular ${grupos.length} operação(ões)`)));
+  } catch (e) { aviso('lote-msg', e.message, 'err'); }
+}
+$('lote-arquivo').onchange = (e) => receberArquivo(e.target.files[0]);
+const zona = $('lote-drop');
+['dragenter', 'dragover'].forEach((ev) => zona.addEventListener(ev, (e) => { e.preventDefault(); zona.classList.add('over'); }));
+['dragleave', 'drop'].forEach((ev) => zona.addEventListener(ev, (e) => { e.preventDefault(); zona.classList.remove('over'); }));
+zona.addEventListener('drop', (e) => receberArquivo(e.dataTransfer.files[0]));
+
+async function processarLote() {
+  const botao = $('lote-enviar'); botao.disabled = true;
+  const tam = 50; const todos = [];
+  try {
+    for (let i = 0; i < loteOps.length; i += tam) {
+      aviso('lote-msg', `Simulando… ${Math.min(i + tam, loteOps.length)} de ${loteOps.length}`, 'warn');
+      const parte = loteOps.slice(i, i + tam);
+      const r = await post('/v1/simulacoes/lote', { regime: loteRegime, operacoes: parte.map((g) => g.entrada) });
+      r.resultados.forEach((x) => todos.push({ grupo: parte[x.indice], ...x }));
+    }
+    aviso('lote-msg'); mostrarLote(todos);
+  } catch (e) {
+    aviso('lote-msg', e.message + (todos.length ? ` As ${todos.length} primeiras operações foram simuladas e contadas na sua cota.` : ''), 'err');
+    botao.disabled = false;
+  }
+}
+
+function mostrarLote(res) {
+  const alvo = $('lote-resultado'); limpar(alvo);
+  let cbs = 0; let ibs = 0; let total = 0; let calculadas = 0;
+  const problemas = loteProblemasLeitura.map((p) => ({ ...p }));
+  const linhas = res.map((x) => {
+    const g = x.grupo; const t = x.ok ? x.resultado.totais : null;
+    let comProblema = !x.ok;
+    if (!x.ok) problemas.push({ linha: g.linhas.join(', '), documento: g.documento, mensagem: x.erro });
+    else {
+      x.resultado.itens.forEach((it, k) => { if (it.situacao === 'erro' || it.mensagens.length) { comProblema = true; problemas.push({ linha: g.linhas[k] ?? g.linhas[0], documento: g.documento, mensagem: (it.mensagens[0] || it.situacaoTexto) }); } });
+      cbs += t.cbs || 0; ibs += t.ibs || 0; total += t.total || 0;
+    }
+    if (!comProblema) calculadas++;
+    return { g, t, comProblema };
+  });
+  alvo.append(el('div', { class: 'card' },
+    el('h2', {}, 'Resultado do lote'),
+    el('div', { class: 'msg warn small' }, 'Valores informativos. Itens com problema não entram nos totais até serem corrigidos na planilha.'),
+    el('div', { class: 'totals' }, kpi('Total de tributos', total, true), kpi('CBS (federal)', cbs), kpi('IBS (estados e municípios)', ibs),
+      el('div', { class: 'kpi' }, el('div', { class: 'v' }, `${calculadas} de ${res.length}`), el('div', { class: 'l' }, 'Operações sem problemas'))),
+    el('div', { class: 'row noprint' },
+      el('button', { onclick: () => baixarResultadoCsv(linhas) }, '⇩ Baixar resultado (CSV)'),
+      el('button', { class: 'sec', onclick: () => window.print() }, 'Imprimir'),
+      el('button', { class: 'sec', onclick: () => { alvo.hidden = true; $('lote-form').hidden = false; limpar($('lote-previa')); $('lote-arquivo').value = ''; loteOps = []; } }, 'Novo lote'))));
+  if (problemas.length) {
+    alvo.append(el('div', { class: 'card' }, el('h2', {}, `Problemas encontrados (${problemas.length})`),
+      el('p', { class: 'mut small' }, 'Corrija estas linhas na planilha e envie de novo. A coluna indica a linha do arquivo.'),
+      problemas.map((p) => el('div', { class: 'prob' }, el('div', { class: 's' }, '!'),
+        el('div', {}, el('strong', {}, `Linha ${p.linha}${p.documento ? ' · ' + p.documento : ''}`), el('div', { class: 'small', style: 'color:var(--red)' }, p.mensagem))))));
+  }
+  alvo.append(el('div', { class: 'card' }, el('h2', {}, 'Operações'),
+    el('div', { class: 'scroll' }, el('table', {}, el('thead', {}, el('tr', {}, ['Documento', 'Data', 'Situação', 'CBS', 'IBS', 'Total'].map((c, k) => el('th', { class: k >= 3 ? 'n' : '' }, c)))),
+      el('tbody', {}, linhas.map(({ g, t, comProblema }) => el('tr', {},
+        el('td', {}, g.documento), el('td', {}, g.entrada.data.split('-').reverse().join('/')),
+        el('td', {}, el('span', { class: 'badge ' + (comProblema ? 'erro' : 'calculado') }, comProblema ? 'Com problema' : 'Calculado')),
+        el('td', { class: 'n' }, dinheiro(t?.cbs)), el('td', { class: 'n' }, dinheiro(t?.ibs)), el('td', { class: 'n' }, el('strong', {}, dinheiro(t?.total))))))))));
+  $('lote-form').hidden = true; alvo.hidden = false; window.scrollTo(0, 0);
+  carregarUsoResumo();
+}
+
+function baixarResultadoCsv(linhas) {
+  const num = (v) => (v === null || v === undefined ? '' : String(v).replace('.', ','));
+  const cel = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+  const corpo = [['documento', 'data', 'situacao', 'cbs', 'ibs', 'total'].join(';')].concat(linhas.map(({ g, t, comProblema }) =>
+    [g.documento, g.entrada.data, comProblema ? 'com problema' : 'calculado', num(t?.cbs), num(t?.ibs), num(t?.total)].map(cel).join(';'))).join('\r\n');
+  const a = el('a', { href: URL.createObjectURL(new Blob(['﻿' + corpo], { type: 'text/csv;charset=utf-8' })), download: 'resultado-lote.csv' });
+  document.body.append(a); a.click(); a.remove();
 }
 
 /* ---------- nota (DANFSe) ---------- */

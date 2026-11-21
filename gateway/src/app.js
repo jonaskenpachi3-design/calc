@@ -302,6 +302,34 @@ export function criarApp(config, db) {
       return responder(res, 200, await simular(ctx, mSim[1], entrada));
     }
 
+    // Lote: várias simulações de uma vez. Cada operação gasta uma unidade da cota.
+    if (metodo === 'POST' && pathname === '/v1/simulacoes/lote') {
+      const { regime, operacoes } = await lerJson(req, config.maxJsonBytes);
+      if (regime !== 'regime-normal' && regime !== 'simples-nacional') {
+        throw new HttpError(400, 'regime_invalido', 'Escolha o regime: regime normal ou Simples Nacional');
+      }
+      if (!Array.isArray(operacoes) || operacoes.length === 0) {
+        throw new HttpError(400, 'lote_vazio', 'Envie ao menos uma operação');
+      }
+      if (operacoes.length > config.maxOperacoesLote) {
+        throw new HttpError(400, 'lote_grande', `Envie no máximo ${config.maxOperacoesLote} operações por vez`);
+      }
+      const resultados = new Array(operacoes.length);
+      let proximo = 0;
+      const trabalhador = async () => {
+        while (proximo < operacoes.length) {
+          const i = proximo++;
+          try {
+            resultados[i] = { indice: i, ok: true, resultado: await simular(ctx, regime, operacoes[i]) };
+          } catch (e) {
+            resultados[i] = { indice: i, ok: false, erro: e instanceof HttpError ? e.message : 'Não foi possível simular esta operação.' };
+          }
+        }
+      };
+      await Promise.all(Array.from({ length: 4 }, trabalhador));
+      return responder(res, 200, { resultados });
+    }
+
     if (metodo === 'POST' && pathname === '/v1/danfse') {
       const xml = await lerCorpo(req, config.maxXmlBytes);
       if (xml.length === 0) throw new HttpError(400, 'corpo_vazio', 'Envie o XML da NFS-e no corpo (Content-Type: application/xml)');

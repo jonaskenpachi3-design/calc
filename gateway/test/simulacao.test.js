@@ -192,3 +192,29 @@ test('calculadora recusando os dados vira mensagem para a tela (422)', async () 
   assert.equal(r.status, 422);
   assert.equal((await r.json()).erro.mensagem, 'Alíquota efetiva ausente');
 });
+
+test('lote: simula várias operações, isola erros e gasta uma cota por operação', async () => {
+  const t = await token();
+  const r = await fetch(`${base}/v1/simulacoes/lote`, { method: 'POST',
+    headers: { authorization: `Bearer ${t}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ regime: 'regime-normal', operacoes: [formulario(), { ...formulario(), uf: '' }, formulario()] }) });
+  assert.equal(r.status, 200);
+  const { resultados } = await r.json();
+  assert.equal(resultados.length, 3);
+  assert.equal(resultados[0].ok, true);
+  assert.equal(resultados[0].resultado.totais.total, 42.72);
+  assert.equal(resultados[1].ok, false);
+  assert.match(resultados[1].erro, /Escolha o estado/);
+  assert.equal(resultados[2].ok, true);
+  const uso = await (await fetch(base + '/usage', { headers: { authorization: `Bearer ${t}` } })).json();
+  assert.equal(uso.uso.calculo.usado, 2);
+});
+
+test('lote: rejeita regime inválido, lote vazio e lote grande demais', async () => {
+  const t = await token();
+  const enviar = (corpo) => fetch(`${base}/v1/simulacoes/lote`, { method: 'POST',
+    headers: { authorization: `Bearer ${t}`, 'content-type': 'application/json' }, body: JSON.stringify(corpo) });
+  assert.equal((await enviar({ regime: 'x', operacoes: [{}] })).status, 400);
+  assert.equal((await enviar({ regime: 'regime-normal', operacoes: [] })).status, 400);
+  assert.equal((await enviar({ regime: 'regime-normal', operacoes: new Array(201).fill({}) })).status, 400);
+});

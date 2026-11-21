@@ -6,6 +6,10 @@ import {
 } from './auth.js';
 import { PLANOS, limiteDoPlano, inicioDoMes } from './plans.js';
 import { chamar, CacheTtl } from './upstream.js';
+import {
+  montarRegimeNormal, traduzirRegimeNormal, montarSimples, traduzirSimples,
+  mensagemDeErroOficial, EntradaInvalida,
+} from './simulacao.js';
 
 const TIPOS_ESTATICOS = {
   '.html': 'text/html; charset=utf-8',
@@ -151,6 +155,37 @@ export function criarApp(config, db) {
     });
   }
 
+  // Simulação guiada: recebe o formulário, chama a calculadora oficial e devolve um resultado legível.
+  async function simular(ctx, tipo, entrada) {
+    let operacao;
+    try {
+      operacao = tipo === 'regime-normal'
+        ? montarRegimeNormal(entrada, config.aliquotasReferencia)
+        : montarSimples(entrada);
+    } catch (e) {
+      if (e instanceof EntradaInvalida) throw new HttpError(400, 'entrada_invalida', e.message);
+      throw e;
+    }
+    const alvo = tipo === 'regime-normal'
+      ? [up.regimeRegular, '/api/calculadora/observabilidade/regime-geral', 'regime-regular']
+      : [up.simplesNacional, '/api/calculadora/observabilidade/simples-nacional/nao-assistido', 'simples-nacional'];
+    const r = await proxy({
+      ctx, recurso: 'calculo', servico: alvo[2], url: alvo[0] + alvo[1], headers: JSON_H,
+      body: JSON.stringify(operacao), operacaoId: operacao.id, payloadJson: entrada,
+    });
+    if (r.status !== 200) {
+      const motivo = mensagemDeErroOficial(r.body);
+      throw new HttpError(r.status >= 500 ? 502 : 422, 'calculo_recusado',
+        motivo || 'A calculadora não aceitou os dados informados. Revise o formulário.');
+    }
+    let corpo;
+    try { corpo = JSON.parse(r.body.toString('utf8')); } catch {
+      throw new HttpError(502, 'resposta_invalida', 'Resposta inesperada da calculadora');
+    }
+    const simulado = !!r.headers['x-warning-dados-simulados'];
+    return tipo === 'regime-normal' ? traduzirRegimeNormal(corpo, entrada, simulado) : traduzirSimples(corpo, entrada);
+  }
+
   // ---------- rotas ----------
   async function rotear(req, res, url) {
     const { pathname } = url;
@@ -159,6 +194,8 @@ export function criarApp(config, db) {
     if (pathname === '/health') return responder(res, 200, { status: 'ok' });
 
     // --- contas ---
+    if (metodo === 'GET' && pathname === '/planos') return responder(res, 200, { planos: PLANOS });
+
     if (metodo === 'POST' && pathname === '/auth/register') {
       const { nome, email, senha } = await lerJson(req, 10_000);
       if (typeof nome !== 'string' || !nome.trim() || nome.length > 120) throw new HttpError(400, 'nome_invalido', 'Nome obrigatório');
@@ -259,6 +296,12 @@ export function criarApp(config, db) {
       return enviar(res, await calcular(ctx, 'simples', 'simples-informado', await lerJson(req, config.maxJsonBytes)));
     }
 
+    const mSim = /^\/v1\/simulacoes\/(regime-normal|simples-nacional)$/.exec(pathname);
+    if (metodo === 'POST' && mSim) {
+      const entrada = await lerJson(req, config.maxJsonBytes);
+      return responder(res, 200, await simular(ctx, mSim[1], entrada));
+    }
+
     if (metodo === 'POST' && pathname === '/v1/danfse') {
       const xml = await lerCorpo(req, config.maxXmlBytes);
       if (xml.length === 0) throw new HttpError(400, 'corpo_vazio', 'Envie o XML da NFS-e no corpo (Content-Type: application/xml)');
@@ -281,6 +324,7 @@ export function criarApp(config, db) {
       }));
     }
 
+    // Atividades do Simples (exige ?data=AAAA-MM-DD; aceita tpDoc, cClassTrib, anexos).
     if (metodo === 'GET' && pathname === '/v1/simples-nacional/atividades') {
       return enviar(res, await consultar('simples-nacional', `${up.simplesNacional}/api/calculadora/simples-nacional/atividades${url.search}`));
     }
@@ -290,14 +334,15 @@ export function criarApp(config, db) {
     }
 
     // Tabelas oficiais do regime regular (lista fechada: o gateway não vira proxy aberto).
-    const mTab = /^\/v1\/tabelas\/(situacoes-tributarias\/cbs-ibs|classificacoes-tributarias\/[\w-]+(?:\/[\w-]+)?|fundamentacoes-legais|ncm|nbs|aliquota-uniao|aliquota-uf|aliquota-municipio)$/.exec(pathname);
+    // A maioria exige ?data=AAAA-MM-DD.
+    const mTab = /^\/v1\/(?:dados|tabelas)\/(ufs|ufs\/municipios|ncm|nbs|nbs\/lista|situacoes-tributarias\/(?:cbs-ibs|is)|classificacoes-tributarias\/(?:cbs-ibs|imposto-seletivo)|aliquota-uniao|aliquota-uf|aliquota-municipio|fundamentacoes-legais)$/.exec(pathname);
     if (metodo === 'GET' && mTab) {
       return enviar(res, await consultar('regime-regular', `${up.regimeRegular}/api/calculadora/dados-abertos/${mTab[1]}${url.search}`));
     }
 
     if (metodo === 'GET' && pathname === '/v1/versao') {
       const [a, b, c] = await Promise.all([
-        chamar(`${up.regimeRegular}/api/versao`, { timeoutMs: 5000 }),
+        chamar(`${up.regimeRegular}/api/calculadora/dados-abertos/versao`, { timeoutMs: 5000 }),
         chamar(`${up.simplesNacional}/api/versao`, { timeoutMs: 5000 }),
         chamar(`${up.danfse}/health/ready`, { timeoutMs: 5000 }),
       ]);

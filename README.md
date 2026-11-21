@@ -111,11 +111,13 @@ Outras variáveis do gateway (valores padrão em `gateway/src/config.js`): `PORT
 
 Fluxo completo para o cliente:
 
-1. Criar a conta (nome da empresa, e-mail, senha de 10 caracteres ou mais) e entrar.
+1. Criar a conta (nome da empresa, e-mail, senha de 10 caracteres ou mais) e entrar. A primeira tela é a **Visão geral** (uso do mês e atividade recente).
 2. **Simular tributos:** escolher “regime normal” ou “Simples Nacional”, preencher a operação e os itens, clicar em **Calcular tributos**.
 3. **PDF da nota de serviço:** enviar o XML da NFS-e e baixar o DANFSe.
 4. **Minhas simulações:** consultar o histórico.
 5. **Minha conta:** ver plano, uso do mês e (escondidas) chaves de API para integração.
+
+A tela segue o protótipo "Nexo Fiscal": menu lateral, painel de visão geral com o uso real da conta, cartões e formulários guiados. As funções do protótipo que ainda não existem (carteira de CNPJs, lote, auditoria, comparativo) aparecem no menu como "Em breve", sem dados de mentira. Para trocar o nome da marca, edite `gateway/public/index.html` (busque por "nexo fiscal").
 
 O passo a passo para o usuário final está no manual do usuário, entregue junto com este projeto.
 

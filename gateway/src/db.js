@@ -173,6 +173,7 @@ function criarRepositorio(db) {
     ),
     analisesDesde: db.prepare('SELECT * FROM analises WHERE tenant_id = ? AND cnpj = ? AND criado_em >= ? ORDER BY criado_em DESC LIMIT 500'),
     apagarAnalises: db.prepare('DELETE FROM analises WHERE tenant_id = ? AND cnpj = ?'),
+    apagarAnalise: db.prepare('DELETE FROM analises WHERE id = ? AND tenant_id = ? AND cnpj = ?'),
     escritorio: db.prepare('SELECT * FROM escritorios WHERE tenant_id = ?'),
     gravarEscritorio: db.prepare(
       `INSERT INTO escritorios (tenant_id, nome, responsavel, crc, contato, cor, logo, atualizado_em) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -238,9 +239,11 @@ function criarRepositorio(db) {
     },
     contarEmpresas: (tenantId) => q.contarEmpresas.get(tenantId).n,
     registrarAnalise(tenantId, cnpj, a) {
-      q.inserirAnalise.run(tenantId, cnpj, a.origem, a.regime, a.documentos, a.itens, a.itens_com_problema, a.base, a.cbs, a.ibs, a.imposto_seletivo, a.total, a.tributos_atuais, a.cbs_ibs_comparavel, agora());
+      const r = q.inserirAnalise.run(tenantId, cnpj, a.origem, a.regime, a.documentos, a.itens, a.itens_com_problema, a.base, a.cbs, a.ibs, a.imposto_seletivo, a.total, a.tributos_atuais, a.cbs_ibs_comparavel, agora());
       q.atualizarUltimaSimulacao.run(agora(), agora(), cnpj, tenantId);
+      return Number(r.lastInsertRowid);
     },
+    removerAnalise: (tenantId, cnpj, id) => q.apagarAnalise.run(id, tenantId, cnpj).changes > 0,
     analisesDesde: (tenantId, cnpj, desde) => q.analisesDesde.all(tenantId, cnpj, desde),
     obterEscritorio: (tenantId) => q.escritorio.get(tenantId) || null,
     gravarEscritorio: (tenantId, e) => q.gravarEscritorio.run(tenantId, e.nome, e.responsavel, e.crc, e.contato, e.cor, e.logo, agora()),

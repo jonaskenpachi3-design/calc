@@ -330,13 +330,19 @@ export function criarApp(config, db) {
       const inteiro = (v, nome) => { if (!Number.isInteger(v) || v < 0 || v > 1e7) throw new HttpError(400, 'analise_invalida', `Valor inválido em ${nome}`); return v; };
       if (!['simulacao', 'lote'].includes(b.origem)) throw new HttpError(400, 'analise_invalida', 'origem deve ser simulacao ou lote');
       if (!['regime-normal', 'simples-nacional'].includes(b.regime)) throw new HttpError(400, 'analise_invalida', 'regime inválido');
-      db.registrarAnalise(ctx.tenantId, cnpj, {
+      const id = db.registrarAnalise(ctx.tenantId, cnpj, {
         origem: b.origem, regime: b.regime,
         documentos: inteiro(b.documentos, 'documentos'), itens: inteiro(b.itens, 'itens'), itens_com_problema: inteiro(b.itensComProblema, 'itensComProblema'),
         base: num(b.base, 'base'), cbs: num(b.cbs, 'cbs'), ibs: num(b.ibs, 'ibs'), imposto_seletivo: num(b.impostoSeletivo ?? 0, 'impostoSeletivo'), total: num(b.total, 'total'),
         tributos_atuais: num(b.tributosAtuais, 'tributosAtuais', true), cbs_ibs_comparavel: num(b.cbsIbsComparavel, 'cbsIbsComparavel', true),
       });
-      return responder(res, 201, { salva: true });
+      return responder(res, 201, { salva: true, id });
+    }
+
+    const mApagar = /^\/empresas\/(\d{14})\/analises\/(\d+)$/.exec(pathname);
+    if (metodo === 'DELETE' && mApagar) {
+      if (!db.removerAnalise(ctx.tenantId, mApagar[1], Number(mApagar[2]))) throw new HttpError(404, 'analise_nao_encontrada', 'Análise não encontrada');
+      return responder(res, 200, { removida: true });
     }
 
     const mDashboard = /^\/empresas\/(\d{14})\/dashboard$/.exec(pathname);

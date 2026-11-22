@@ -153,7 +153,10 @@ test('análises: só totais, validação, dashboard real e vazio sem inventar n�
   assert.equal(vazio.diferenca.valor, null);
 
   const ok = { origem: 'lote', regime: 'regime-normal', documentos: 10, itens: 12, itensComProblema: 2, base: 1000, cbs: 90, ibs: 10, total: 100, tributosAtuais: 80, cbsIbsComparavel: 100 };
-  assert.equal((await post(`/empresas/${CNPJ_A}/analises`, ok, auth)).status, 201);
+  const salva = await post(`/empresas/${CNPJ_A}/analises`, ok, auth);
+  assert.equal(salva.status, 201);
+  const { id: idSalva } = await salva.json();
+  assert.ok(idSalva > 0);
   assert.equal((await post(`/empresas/${CNPJ_A}/analises`, { ...ok, base: -1 }, auth)).status, 400);
   assert.equal((await post(`/empresas/${CNPJ_A}/analises`, { ...ok, origem: 'x' }, auth)).status, 400);
   assert.equal((await post(`/empresas/11222333000182/analises`, ok, auth)).status, 404);
@@ -168,6 +171,11 @@ test('análises: só totais, validação, dashboard real e vazio sem inventar n�
   assert.equal(d.diferenca.tipo, 'aumento');
   assert.equal(d.alertas[0].qtd, 2);
   assert.equal(d.grafico.labels.length, 6);
+
+  // substituir uma análise (apagar e salvar de novo) não dobra os números
+  assert.equal((await fetch(`${base}/empresas/${CNPJ_A}/analises/${idSalva}`, { method: 'DELETE', headers: auth })).status, 200);
+  assert.equal((await fetch(`${base}/empresas/${CNPJ_A}/analises/${idSalva}`, { method: 'DELETE', headers: auth })).status, 404);
+  assert.equal((await (await fetch(`${base}/empresas/${CNPJ_A}/dashboard`, { headers: auth })).json()).vazio, true);
 });
 
 test('empresas: isoladas entre escritórios e limitadas pelo plano', async () => {

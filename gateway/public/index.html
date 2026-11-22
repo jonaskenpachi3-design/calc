@@ -1,22 +1,1094 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' https://cdn.jsdelivr.net https://brasilapi.com.br https://receitaws.com.br https://cnpj.ws; img-src 'self' data:;">
-  <title>Nexo Fiscal — Simulador CBS e IBS</title>
-  <link rel="stylesheet" href="styles.css">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <!-- Chart.js para gráficos -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nexo Fiscal — Simulador CBS e IBS</title>
+<style>
+  :root {
+    --navy:#14263d; --ink:#1c2d40; --mut:#5f7084; --bd:#e5ebf1; --bg:#f4f7fa; --card:#ffffff;
+    --teal:#0d9488; --teal-d:#0b766e; --teal-soft:#e7f6f3;
+    --blue:#3976bd; --blue-soft:#edf4fc;
+    --amber:#9b681d; --amber-soft:#fff5e3; --red:#b94f4f; --red-soft:#fff0f0; --green:#24845f; --green-soft:#eaf7f1;
+    --shadow:0 8px 24px rgba(26,48,72,.06); --radius:16px;
+  }
+  * { box-sizing:border-box; }
+  [hidden] { display:none !important; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  h1 { font-size:26px; line-height:1.2; margin:0 0 8px; color:var(--navy); letter-spacing:-.5px; }
+  h2 { font-size:17px; margin:0 0 12px; color:var(--navy); }
+  h3 { font-size:15px; margin:0 0 6px; color:var(--navy); }
+  p { margin:0 0 12px; }
+  .mut { color:var(--mut); }
+  .small { font-size:13px; }
+  .eyebrow { color:var(--teal-d); font-size:11px; text-transform:uppercase; letter-spacing:1.6px; font-weight:800; margin-bottom:6px; }
+
+  /* botões e campos */
+  button { min-height:44px; padding:8px 18px; border:1px solid transparent; border-radius:10px; background:var(--teal); color:#fff; font:inherit; font-weight:700; font-size:14px; cursor:pointer; box-shadow:0 4px 10px #0d948822; transition:.15s; }
+  button:hover:not(:disabled) { background:var(--teal-d); }
+  button.sec { background:#fff; color:#41556b; border-color:#dce5ec; box-shadow:none; }
+  button.sec:hover:not(:disabled) { background:#f8fafc; border-color:#b9c9d8; }
+  button.link { background:none; color:var(--teal-d); padding:0 4px; min-height:0; font-weight:600; text-decoration:underline; box-shadow:none; }
+  button:disabled { opacity:.55; cursor:default; }
+  label { display:block; font-weight:700; font-size:13px; color:#41556b; margin:0 0 5px; }
+  .hint { font-weight:400; color:var(--mut); font-size:12.5px; display:block; margin-top:2px; }
+  input, select { width:100%; min-height:44px; padding:8px 12px; border:1px solid #dce5ec; border-radius:10px; background:#fff; color:var(--ink); font:inherit; }
+  input:focus, select:focus { outline:0; border-color:#54b5a7; box-shadow:0 0 0 3px #e6f6f2; }
+  button:focus-visible, summary:focus-visible { outline:3px solid #54b5a7; outline-offset:2px; }
+  .grid { display:grid; gap:14px; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); margin-bottom:14px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .msg { padding:12px 14px; border-radius:10px; margin:12px 0; font-size:14px; }
+  .msg.err { background:var(--red-soft); color:var(--red); }
+  .msg.ok { background:var(--green-soft); color:var(--green); }
+  .msg.warn { background:var(--amber-soft); color:var(--amber); }
+
+  /* cartões, selos */
+  .card { background:var(--card); border:1px solid var(--bd); border-radius:var(--radius); box-shadow:var(--shadow); padding:22px; margin-bottom:16px; }
+  .pill, .badge { display:inline-flex; align-items:center; border-radius:999px; padding:3px 10px; font-size:12px; font-weight:700; white-space:nowrap; }
+  .pill-blue { background:var(--blue-soft); color:#3c6fa8; }
+  .pill-gray { background:#f0f3f6; color:#657588; }
+  .pill-green, .badge.calculado { background:var(--green-soft); color:var(--green); }
+  .badge.erro { background:var(--red-soft); color:var(--red); }
+  .badge.indisponivel { background:var(--amber-soft); color:var(--amber); }
+
+  /* marca */
+  .brand { display:flex; align-items:center; gap:11px; }
+  .brand-mark { width:36px; height:36px; border-radius:11px; background:linear-gradient(135deg,#35c4b4,#08796f); display:grid; place-items:center; color:#fff; font-weight:800; font-size:18px; box-shadow:0 5px 14px #061a2b66; flex:none; }
+  .brand-name { font-size:17px; font-weight:760; color:#fff; line-height:1.1; }
+  .brand-sub { font-size:10px; color:#9fb1c4; letter-spacing:1.7px; text-transform:uppercase; margin-top:2px; }
+
+  /* visitante: tela de acesso */
+  .page { max-width:1060px; margin:0 auto; padding:28px 16px 12px; }
+  .login-wrap { display:grid; grid-template-columns:1.05fr .95fr; overflow:hidden; padding:0; min-height:540px; }
+  .login-art { padding:42px; background:linear-gradient(145deg,#142c48,#0f756e); color:#fff; position:relative; display:flex; flex-direction:column; justify-content:space-between; gap:24px; overflow:hidden; }
+  .login-art::before, .login-art::after { content:""; position:absolute; border:1px solid #ffffff18; border-radius:50%; width:380px; height:380px; right:-130px; top:-90px; }
+  .login-art::after { width:270px; height:270px; right:-75px; top:-35px; }
+  .login-art h2 { font-size:27px; line-height:1.2; color:#fff; margin:28px 0 12px; letter-spacing:-.6px; position:relative; }
+  .login-art p { color:#c3dbdf; font-size:14px; position:relative; }
+  .benefits { list-style:none; padding:0; margin:14px 0 0; position:relative; }
+  .benefits li { padding:5px 0 5px 26px; position:relative; font-size:14px; color:#e3f1f2; }
+  .benefits li::before { content:"✓"; position:absolute; left:0; color:#6fe0cf; font-weight:800; }
+  .login-foot { color:#afc9cd; font-size:12px; position:relative; }
+  .login-form { padding:42px; display:flex; flex-direction:column; justify-content:center; max-width:500px; width:100%; margin:auto; }
+  .login-form h2 { font-size:22px; margin-bottom:18px; }
+  .plans { display:grid; gap:14px; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); margin:8px 0 36px; }
+  .plan ul { padding-left:18px; margin:8px 0 0; }
+
+  /* aplicação */
+  .app { min-height:100vh; display:grid; grid-template-columns:258px 1fr; }
+  .sidebar { background:var(--navy); color:#d9e3ee; padding:26px 16px; display:flex; flex-direction:column; gap:22px; min-height:100vh; position:sticky; top:0; align-self:start; height:100vh; }
+  .side-label { padding:0 12px; color:#8da2b8; font-size:10px; letter-spacing:1.5px; font-weight:700; text-transform:uppercase; margin-bottom:-12px; }
+  .nav { display:flex; flex-direction:column; gap:5px; }
+  .nav-item { border:0; background:transparent; color:#bdcad8; text-align:left; border-radius:10px; padding:10px 12px; display:flex; align-items:center; gap:11px; width:100%; min-height:48px; box-shadow:none; font-weight:600; }
+  .nav-item:hover:not(:disabled) { background:#ffffff12; color:#fff; }
+  .nav-item[aria-selected="true"] { background:#ffffff18; color:#fff; box-shadow:inset 3px 0 #35c4b4; }
+  .nav-item:disabled { opacity:.5; cursor:not-allowed; }
+  .nav-num { width:24px; height:24px; border:1px solid #647a91; border-radius:7px; display:grid; place-items:center; font-size:10px; font-weight:700; flex:none; }
+  .nav-item[aria-selected="true"] .nav-num { background:#1b9e92; border-color:#1b9e92; color:#fff; }
+  .nav-text { font-size:13px; font-weight:650; line-height:1.2; }
+  .nav-cap { font-size:11px; color:#8fa3b7; font-weight:400; margin-top:1px; }
+  .soon { margin-left:auto; font-size:9px; letter-spacing:.6px; text-transform:uppercase; background:#ffffff1c; color:#b9c8d8; border-radius:99px; padding:2px 7px; }
+  .sidebar-bottom { margin-top:auto; border-top:1px solid #ffffff1c; padding:16px 8px 0; display:flex; align-items:center; gap:10px; }
+  .avatar { width:34px; height:34px; background:#35516e; border-radius:50%; display:grid; place-items:center; color:#fff; font-weight:700; font-size:12px; flex:none; }
+  .user-name { font-size:13px; color:#fff; font-weight:650; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:170px; }
+  .user-role { font-size:11px; color:#9fb1c4; }
+  .main { min-width:0; display:flex; flex-direction:column; }
+  .topbar { height:68px; background:#fff; border-bottom:1px solid var(--bd); padding:0 34px; display:flex; align-items:center; justify-content:space-between; gap:18px; position:sticky; top:0; z-index:5; }
+  .breadcrumb { font-size:13px; color:var(--mut); } .breadcrumb strong { color:var(--ink); }
+  .content { padding:26px 34px 36px; max-width:1180px; width:100%; margin:0 auto; }
+  .page-head { margin-bottom:20px; }
+  .page-head p { color:var(--mut); max-width:700px; margin:0; }
+  .foot { padding:8px 34px 32px; color:var(--mut); font-size:12.5px; max-width:1180px; margin:0 auto; width:100%; }
+
+  /* painel inicial */
+  .stats { display:grid; gap:14px; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); margin-bottom:16px; }
+  .stat { padding:18px; margin:0; }
+  .stat .l { color:#748397; font-size:12.5px; font-weight:650; }
+  .stat .v { font-size:26px; font-weight:780; letter-spacing:-.6px; color:var(--navy); margin-top:2px; }
+  .stat .f { font-size:12px; color:#8795a4; margin-top:2px; }
+  .two { display:grid; gap:16px; grid-template-columns:2fr 1fr; align-items:start; }
+  .actions { display:grid; gap:9px; }
+  .actions button { justify-content:flex-start; text-align:left; display:flex; gap:10px; align-items:center; padding:12px 14px; }
+
+  /* simulador */
+  .choice { display:grid; gap:12px; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); margin-bottom:20px; }
+  .choice button { text-align:left; background:#fff; color:var(--ink); border:1px solid var(--bd); padding:14px 16px; font-weight:400; box-shadow:none; display:flex; align-items:center; gap:12px; }
+  .choice button:hover:not(:disabled) { background:#fbfefd; }
+  .choice button::after { content:""; margin-left:auto; width:18px; height:18px; border:1.5px solid #c6d2dd; border-radius:50%; flex:none; }
+  .choice button[aria-pressed="true"] { border-color:#5cb9aa; box-shadow:0 0 0 3px #e5f5f1; background:#fbfefd; }
+  .choice button[aria-pressed="true"]::after { border-color:var(--teal); background:radial-gradient(var(--teal) 0 45%, transparent 50%); }
+  .choice strong { display:block; font-size:15px; color:var(--navy); }
+  .item { border:1px solid var(--bd); border-radius:12px; padding:16px; margin-bottom:12px; background:#f9fcfd; }
+  .item .head { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; font-weight:700; color:var(--navy); }
+  .bar { height:8px; background:#edf1f4; border-radius:99px; overflow:hidden; margin:6px 0 14px; }
+  .bar i { display:block; height:100%; background:#20a18f; border-radius:99px; }
+  .totals { display:grid; gap:12px; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); margin:14px 0; }
+  .kpi { background:#f7fafc; border:1px solid var(--bd); border-radius:12px; padding:14px; }
+  .kpi .v { font-size:22px; font-weight:780; color:var(--navy); }
+  .kpi .l { color:var(--mut); font-size:13px; }
+  .kpi.main { background:var(--teal); border-color:var(--teal); } .kpi.main .v, .kpi.main .l { color:#fff; } .kpi.main .l { opacity:.9; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th { text-align:left; font-size:11px; color:#8391a1; letter-spacing:.8px; text-transform:uppercase; font-weight:750; padding:10px 10px; background:#f8fafc; border-bottom:1px solid var(--bd); }
+  td { text-align:left; padding:12px 10px; border-bottom:1px solid #edf1f5; vertical-align:top; color:#42556a; }
+  tr:last-child td { border-bottom:0; }
+  td.n, th.n { text-align:right; white-space:nowrap; }
+  .scroll { overflow-x:auto; }
+  details { margin:8px 0; } summary { cursor:pointer; font-weight:700; min-height:32px; color:var(--navy); }
+  code.key { display:block; word-break:break-all; padding:10px; background:#fff; border:1px solid var(--bd); border-radius:8px; margin-top:6px; }
+
+  .drop { border:1.5px dashed #b9cbd7; border-radius:14px; background:#f9fcfd; padding:28px 20px; text-align:center; }
+  .drop.over { border-color:var(--teal); background:#effaf7; }
+  .drop h3 { margin:0 0 4px; }
+  .steps { margin:0 0 14px; padding-left:20px; } .steps li { margin:4px 0; }
+  .bar-wrap { height:8px; background:#edf1f4; border-radius:99px; overflow:hidden; margin:10px 0; }
+  .achados { margin-top:6px; }
+  .achado { display:block; width:100%; text-align:left; background:#fff; color:var(--ink,#16324a); border:1px solid var(--bd); border-radius:8px; padding:8px 10px; margin-bottom:4px; font-weight:400; min-height:0; box-shadow:none; font-size:13px; }
+  .achado:hover { border-color:var(--teal-d); }
+  .editor { background:#f9fcfd; border:1px solid var(--bd); border-radius:12px; padding:14px; margin:8px 0; }
+  .prob { display:flex; gap:11px; padding:12px 0; border-bottom:1px solid #edf1f5; }
+  .prob:last-child { border-bottom:0; }
+  .prob .s { width:28px; height:28px; border-radius:9px; background:var(--red-soft); color:var(--red); display:grid; place-items:center; font-weight:800; flex:none; }
+  @media (max-width:1050px) { .login-wrap { grid-template-columns:1fr; } .login-art { min-height:260px; padding:30px; } .login-form { padding:30px; } .two { grid-template-columns:1fr; } }
+  @media (max-width:860px) {
+    .app { display:block; }
+    .sidebar { position:static; height:auto; min-height:0; padding:12px 14px; gap:10px; }
+    .side-label, .nav-cap, .sidebar-bottom, .soon { display:none; }
+    .nav { flex-direction:row; overflow-x:auto; }
+    .nav-item { width:auto; flex:none; padding:8px 12px; }
+    .nav-item:disabled { display:none; }
+    .topbar { height:auto; min-height:60px; padding:10px 14px; }
+    .breadcrumb { display:none; }
+    .content { padding:18px 14px 26px; } .foot { padding:8px 14px 28px; }
+    .login-art h2 { font-size:22px; margin-top:18px; }
+  }
+  @media print {
+    body { background:#fff; color:#000; }
+    .sidebar, .topbar, .noprint, .foot { display:none !important; }
+    .app { display:block; } .content { padding:0; }
+    .card { border:0; box-shadow:none; padding:0; }
+  }
+</style>
 </head>
 <body>
-  <!-- Root da aplicação -->
-  <div id="app-root"></div>
 
-  <!-- Módulo principal da SPA -->
-  <script type="module" src="app.js"></script>
+<!-- ======== Acesso (visitante) ======== -->
+<section id="visitante" hidden>
+  <div class="page">
+    <div class="card login-wrap">
+      <div class="login-art">
+        <div>
+          <div class="brand"><div class="brand-mark">N</div><div><div class="brand-name">nexo fiscal</div><div class="brand-sub">simulador CBS e IBS</div></div></div>
+          <h2>Descubra quanto vai pagar de CBS e IBS antes de emitir a nota.</h2>
+          <p>Preencha os dados da venda ou do serviço e veja o valor dos novos tributos da Reforma Tributária, item por item, com o mesmo motor de cálculo publicado pela Receita Federal.</p>
+          <ul class="benefits">
+            <li>Sem planilhas e sem termos técnicos: você preenche um formulário.</li>
+            <li>Para empresas do regime normal e do Simples Nacional.</li>
+            <li>PDF (DANFSe) da nota de serviço a partir do XML.</li>
+            <li>Histórico das suas simulações.</li>
+          </ul>
+        </div>
+        <div class="login-foot">Resultado informativo · baseado nas calculadoras da Receita Federal</div>
+      </div>
+      <div class="login-form" id="entrar-card">
+        <div class="eyebrow" id="entrar-eyebrow">Bem-vindo(a) de volta</div>
+        <h2 id="entrar-titulo">Entrar</h2>
+        <div id="campo-nome" hidden style="margin-bottom:14px"><label for="a-nome">Nome da empresa</label><input id="a-nome" autocomplete="organization"></div>
+        <div style="margin-bottom:14px"><label for="a-email">E-mail</label><input id="a-email" type="email" autocomplete="email" placeholder="voce@empresa.com.br"></div>
+        <div style="margin-bottom:16px"><label for="a-senha">Senha <span class="hint">Mínimo de 10 caracteres</span></label><input id="a-senha" type="password" autocomplete="current-password"></div>
+        <div class="row"><button id="a-enviar">Entrar</button><button class="link" id="a-trocar">Ainda não tenho conta</button></div>
+        <div id="a-msg" role="alert"></div>
+      </div>
+    </div>
+    <h2>Planos</h2>
+    <div class="plans" id="planos"></div>
+    <p class="mut small" style="padding-bottom:28px">As simulações usam as calculadoras publicadas pela Receita Federal e têm caráter informativo: não substituem a orientação do seu contador nem a apuração oficial dos tributos.</p>
+  </div>
+</section>
+
+<!-- ======== Aplicação (logado) ======== -->
+<div id="app" class="app" hidden>
+  <aside class="sidebar">
+    <div class="brand"><div class="brand-mark">N</div><div><div class="brand-name">nexo fiscal</div><div class="brand-sub">simulador CBS e IBS</div></div></div>
+    <div class="side-label">Menu</div>
+    <nav class="nav" aria-label="Menu principal">
+      <button class="nav-item" data-aba="inicio" aria-selected="true"><span class="nav-num">01</span><span><div class="nav-text">Visão geral</div><div class="nav-cap">Resumo do seu uso</div></span></button>
+      <button class="nav-item" data-aba="simular" aria-selected="false"><span class="nav-num">02</span><span><div class="nav-text">Simular tributos</div><div class="nav-cap">CBS e IBS por item</div></span></button>
+      <button class="nav-item" data-aba="nota" aria-selected="false"><span class="nav-num">03</span><span><div class="nav-text">PDF da nota (DANFSe)</div><div class="nav-cap">A partir do XML</div></span></button>
+      <button class="nav-item" data-aba="lote" aria-selected="false"><span class="nav-num">04</span><span><div class="nav-text">Simulador em lote</div><div class="nav-cap">Planilha CSV</div></span></button>
+      <button class="nav-item" data-aba="historico" aria-selected="false"><span class="nav-num">05</span><span><div class="nav-text">Minhas simulações</div><div class="nav-cap">Histórico</div></span></button>
+      <button class="nav-item" data-aba="conta" aria-selected="false"><span class="nav-num">06</span><span><div class="nav-text">Minha conta</div><div class="nav-cap">Plano e integração</div></span></button>
+    </nav>
+    <div class="side-label" style="margin-top:6px">Em breve</div>
+    <nav class="nav" aria-label="Funções em desenvolvimento">
+      <button class="nav-item" disabled title="Em desenvolvimento"><span class="nav-num">·</span><span class="nav-text">Carteira de CNPJs</span></button>
+      <button class="nav-item" disabled title="Em desenvolvimento"><span class="nav-num">·</span><span class="nav-text">Auditoria</span></button>
+      <button class="nav-item" disabled title="Em desenvolvimento"><span class="nav-num">·</span><span class="nav-text">Comparativo e relatório</span></button>
+    </nav>
+    <div class="sidebar-bottom"><div class="avatar" id="avatar">—</div><div><div class="user-name" id="quem">Sua conta</div><div class="user-role" id="papel">Conta</div></div></div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="breadcrumb">Nexo Fiscal <span style="padding:0 7px;color:#bdc7d1">/</span> <strong id="crumb">Visão geral</strong></div>
+      <div id="sessao" class="row"><span class="pill pill-blue" id="plano-pill">Plano</span><button class="sec" id="sair">Sair</button></div>
+    </header>
+
+    <main class="content">
+      <!-- Visão geral -->
+      <div id="aba-inicio">
+        <div class="page-head"><div class="eyebrow">Centro de controle</div><h1>Visão geral</h1><p>Acompanhe o uso da sua conta e acesse as ferramentas.</p></div>
+        <div class="stats" id="i-stats"></div>
+        <div class="two">
+          <div class="card"><h2>Atividade recente</h2>
+            <div class="scroll"><table><thead><tr><th>Quando</th><th>O que foi feito</th><th>Resultado</th></tr></thead><tbody id="i-recentes"></tbody></table></div>
+            <p id="i-vazio" class="mut" hidden>Nada por aqui ainda. Faça sua primeira simulação.</p>
+          </div>
+          <div class="card"><h2>Ações rápidas</h2>
+            <div class="actions">
+              <button data-ir="simular" class="sec">＋ Nova simulação</button>
+              <button data-ir="nota" class="sec">▧ Gerar PDF de uma nota</button>
+              <button data-ir="lote" class="sec">⇧ Simular uma planilha (lote)</button>
+              <button data-ir="historico" class="sec">▤ Ver minhas simulações</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Simular -->
+      <div id="aba-simular" hidden>
+        <div class="page-head"><div class="eyebrow">Simulação</div><h1>Simular tributos</h1><p>Preencha os dados da operação e veja a CBS e o IBS de cada item.</p></div>
+        <div id="passo-form" class="card">
+          <h2>1. Para quem é a simulação?</h2>
+          <div class="choice" id="escolha-regime">
+            <button data-regime="regime-normal" aria-pressed="true"><span><strong>Empresa no regime normal</strong><span class="mut small">Lucro presumido ou lucro real</span></span></button>
+            <button data-regime="simples-nacional" aria-pressed="false"><span><strong>Empresa do Simples Nacional</strong><span class="mut small">ME, EPP e demais optantes</span></span></button>
+          </div>
+
+          <h2>2. Dados da operação</h2>
+          <div class="grid">
+            <div><label for="f-data">Data da venda ou do serviço</label><input id="f-data" type="date"></div>
+            <div class="so-normal"><label for="f-uf">Estado</label><select id="f-uf"><option value="">Carregando…</option></select></div>
+            <div class="so-normal"><label for="f-mun">Município</label><select id="f-mun" disabled><option value="">Escolha o estado</option></select></div>
+            <div class="so-simples"><label for="f-doc">Tipo de nota</label>
+              <select id="f-doc"><option value="nfe">NF-e (venda de produtos)</option><option value="nfce">NFC-e (venda ao consumidor)</option><option value="nfse">NFS-e (serviços)</option></select></div>
+          </div>
+
+          <div class="so-simples" id="bloco-simples">
+            <div class="msg warn small">A alíquota efetiva do Simples Nacional é calculada pela Receita a partir do seu faturamento dos últimos 12 meses. Informe abaixo os valores que constam no seu extrato do Simples (PGDAS-D) ou que seu contador passar.</div>
+            <div id="bloco-aliquotas"></div>
+            <div class="row" style="margin-bottom:14px">
+              <label style="font-weight:400"><input type="checkbox" id="f-sublimite" style="width:auto;min-height:0"> Ultrapassei o sublimite de receita</label>
+              <label style="font-weight:400"><input type="checkbox" id="f-fatorr" style="width:auto;min-height:0"> Meu fator “r” é 28% ou mais (só para a atividade 09)</label>
+            </div>
+          </div>
+
+          <h2>3. O que foi vendido?</h2>
+          <div id="itens"></div>
+          <div class="row" style="margin-bottom:8px"><button class="sec" id="add-item">+ Adicionar outro item</button></div>
+          <div id="f-msg" role="alert"></div>
+          <div class="row"><button id="calcular">Calcular tributos</button></div>
+        </div>
+        <div id="passo-resultado" hidden></div>
+      </div>
+
+      <!-- Nota -->
+      <div id="aba-nota" hidden>
+        <div class="page-head"><div class="eyebrow">Documento auxiliar</div><h1>PDF da nota de serviço</h1><p>Envie o arquivo XML da sua NFS-e e baixe o PDF (DANFSe) pronto para imprimir ou enviar ao cliente.</p></div>
+        <div class="card">
+          <div class="grid">
+            <div><label for="d-xml">Arquivo XML da nota</label><input id="d-xml" type="file" accept=".xml,application/xml,text/xml"></div>
+            <div><label for="d-stc">Situação da nota</label><select id="d-stc"><option value="0">Válida</option><option value="1">Substituída</option><option value="2">Cancelada</option></select></div>
+            <div><label for="d-canhoto">Canhoto</label><select id="d-canhoto"><option value="false">Sem canhoto</option><option value="true">Com canhoto</option></select></div>
+          </div>
+          <div class="row"><button id="gerar">Gerar PDF</button></div>
+          <div id="d-msg" role="alert"></div>
+          <p class="mut small" style="margin-top:12px">O arquivo e o PDF não ficam guardados no sistema.</p>
+        </div>
+      </div>
+
+      <!-- Lote -->
+      <div id="aba-lote" hidden>
+        <div class="page-head"><div class="eyebrow">Processamento em lote</div><h1>Simulador em lote</h1><p>Suba uma planilha com várias operações e veja o total de CBS e IBS, além dos itens que precisam de correção.</p></div>
+        <div id="lote-form" class="card">
+          <h2>1. Para quem é o lote?</h2>
+          <div class="choice" id="lote-regime">
+            <button data-regime="regime-normal" aria-pressed="true"><span><strong>Empresa no regime normal</strong><span class="mut small">Lucro presumido ou lucro real</span></span></button>
+            <button data-regime="simples-nacional" aria-pressed="false"><span><strong>Empresa do Simples Nacional</strong><span class="mut small">ME, EPP e demais optantes</span></span></button>
+          </div>
+          <h2>2. Baixe o modelo e preencha</h2>
+          <ol class="steps">
+            <li>Baixe a planilha modelo e abra no Excel ou no Google Planilhas.</li>
+            <li>Preencha uma linha por item. Linhas com o mesmo <strong>documento</strong> formam uma única operação.</li>
+            <li>Salve como <strong>CSV</strong> e envie abaixo (até 500 operações).</li>
+          </ol>
+          <div class="row" style="margin-bottom:18px"><button class="sec" id="lote-modelo">⇩ Baixar planilha modelo</button></div>
+          <h2>3. Envie a planilha</h2>
+          <div class="drop" id="lote-drop">
+            <h3>Arraste o arquivo CSV para cá</h3>
+            <p class="mut small">ou escolha no seu computador</p>
+            <input id="lote-arquivo" type="file" accept=".csv,text/csv,text/plain">
+          </div>
+          <div id="lote-msg" role="alert"></div>
+          <div id="lote-previa"></div>
+        </div>
+        <div id="lote-resultado" hidden></div>
+      </div>
+
+      <!-- Histórico -->
+      <div id="aba-historico" hidden>
+        <div class="page-head"><div class="eyebrow">Histórico</div><h1>Minhas simulações</h1><p>As últimas operações feitas na sua conta.</p></div>
+        <div class="card">
+          <div class="scroll"><table><thead><tr><th>Quando</th><th>O que foi feito</th><th>Resultado</th></tr></thead><tbody id="h-lista"></tbody></table></div>
+          <p id="h-vazio" class="mut" hidden>Nada por aqui ainda. Faça sua primeira simulação.</p>
+        </div>
+      </div>
+
+      <!-- Conta -->
+      <div id="aba-conta" hidden>
+        <div class="page-head"><div class="eyebrow">Conta</div><h1>Minha conta</h1><p>Seu plano, o uso do mês e a integração com outros sistemas.</p></div>
+        <div class="card">
+          <h2>Seu plano</h2>
+          <p id="c-plano"></p>
+          <div id="uso"></div>
+        </div>
+        <div class="card">
+          <h2>Integração com outros sistemas</h2>
+          <p class="mut">Só é necessário se o sistema de gestão da sua empresa for se conectar ao simulador. Peça ao responsável de TI.</p>
+          <details>
+            <summary>Chaves de acesso</summary>
+            <div class="grid" style="margin-top:10px"><div><label for="k-nome">Nome para a nova chave</label><input id="k-nome" placeholder="ex.: Sistema de vendas"></div></div>
+            <div class="row"><button class="sec" id="k-criar">Criar chave</button></div>
+            <div id="k-msg" role="status"></div>
+            <div class="scroll"><table><thead><tr><th>Nome</th><th>Último uso</th><th></th></tr></thead><tbody id="k-lista"></tbody></table></div>
+          </details>
+        </div>
+      </div>
+    </main>
+    <div class="foot">As simulações usam as calculadoras publicadas pela Receita Federal e têm caráter informativo: não substituem a orientação do seu contador nem a apuração oficial dos tributos.</div>
+  </div>
+</div>
+
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+const pct = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 4 });
+const dinheiro = (v) => (v === null || v === undefined ? '—' : brl.format(v));
+
+function el(tag, props, ...filhos) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props || {})) {
+    if (k === 'class') e.className = v; else if (k.startsWith('on')) e.addEventListener(k.slice(2), v); else if (v !== false && v != null) e.setAttribute(k, v === true ? '' : v);
+  }
+  for (const f of filhos.flat()) if (f != null) e.append(f.nodeType ? f : document.createTextNode(String(f)));
+  return e;
+}
+const limpar = (n) => n.replaceChildren();
+function aviso(id, texto, tipo) { const n = $(id); limpar(n); if (texto) n.append(el('div', { class: 'msg ' + (tipo || '') }, texto)); }
+
+let token = null;
+try { token = sessionStorage.getItem('rtc_token'); } catch { /* sem armazenamento */ }
+
+async function api(caminho, opcoes = {}) {
+  const res = await fetch(caminho, { ...opcoes, headers: { ...(opcoes.headers || {}), ...(token ? { authorization: 'Bearer ' + token } : {}) } });
+  if (res.status === 401 && token) sair();
+  return res;
+}
+async function json(caminho, opcoes) {
+  let res;
+  try { res = await api(caminho, opcoes); } catch { throw new Error('Sem conexão com o servidor. Tente novamente.'); }
+  const dados = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(dados?.erro?.mensagem || 'Não foi possível concluir (erro ' + res.status + ').');
+  return dados;
+}
+const post = (c, corpo) => json(c, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(corpo) });
+const lista = (x) => (Array.isArray(x) ? x : x?.atividades || x?.itens || []);
+
+/* ---------- visitante ---------- */
+let modoCadastro = false;
+function modoEntrada() {
+  $('entrar-titulo').textContent = modoCadastro ? 'Criar conta gratuita' : 'Entrar';
+  $('campo-nome').hidden = !modoCadastro;
+  $('a-enviar').textContent = modoCadastro ? 'Criar conta' : 'Entrar';
+  $('a-trocar').textContent = modoCadastro ? 'Já tenho conta' : 'Ainda não tenho conta';
+  $('entrar-eyebrow').textContent = modoCadastro ? 'Comece agora' : 'Bem-vindo(a) de volta';
+  $('a-senha').autocomplete = modoCadastro ? 'new-password' : 'current-password';
+}
+$('a-trocar').onclick = () => { modoCadastro = !modoCadastro; aviso('a-msg'); modoEntrada(); };
+$('a-enviar').onclick = async () => {
+  $('a-enviar').disabled = true;
+  try {
+    const corpo = { email: $('a-email').value, senha: $('a-senha').value, nome: $('a-nome').value };
+    const r = await post(modoCadastro ? '/auth/register' : '/auth/login', corpo);
+    token = r.token; try { sessionStorage.setItem('rtc_token', token); } catch { /* ok */ }
+    $('a-senha').value = ''; aviso('a-msg'); render();
+  } catch (e) { aviso('a-msg', e.message, 'err'); }
+  $('a-enviar').disabled = false;
+};
+
+const NOMES_PLANO = { gratuito: 'Gratuito', profissional: 'Profissional', ilimitado: 'Ilimitado' };
+async function carregarPlanos() {
+  try {
+    const { planos } = await json('/planos');
+    const alvo = $('planos'); limpar(alvo);
+    for (const [chave, lim] of Object.entries(planos)) {
+      alvo.append(el('div', { class: 'card plan' },
+        el('h3', {}, NOMES_PLANO[chave] || chave),
+        el('ul', {},
+          el('li', {}, lim.calculo === null ? 'Simulações sem limite' : `${lim.calculo.toLocaleString('pt-BR')} simulações por mês`),
+          el('li', {}, lim.danfse === null ? 'PDFs de nota sem limite' : `${lim.danfse.toLocaleString('pt-BR')} PDFs de nota por mês`))));
+    }
+  } catch { /* a página funciona sem a lista de planos */ }
+}
+
+/* ---------- sessão ---------- */
+function sair() { token = null; try { sessionStorage.removeItem('rtc_token'); } catch { /* ok */ } render(); }
+$('sair').onclick = sair;
+
+function render() {
+  $('visitante').hidden = !!token; $('app').hidden = !token; $('sessao').hidden = !token;
+  if (token) { iniciarApp(); } else { carregarPlanos(); }
+}
+
+/* ---------- abas ---------- */
+const TITULOS = { inicio: 'Visão geral', simular: 'Simular tributos', nota: 'PDF da nota (DANFSe)', lote: 'Simulador em lote', historico: 'Minhas simulações', conta: 'Minha conta' };
+function abrirAba(nome) {
+  document.querySelectorAll('.nav-item[data-aba]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.aba === nome)));
+  for (const a of Object.keys(TITULOS)) $('aba-' + a).hidden = a !== nome;
+  $('crumb').textContent = TITULOS[nome];
+  if (nome === 'inicio') carregarInicio();
+  if (nome === 'historico') carregarHistorico();
+  if (nome === 'conta') carregarConta();
+  window.scrollTo(0, 0);
+}
+document.querySelectorAll('.nav-item[data-aba]').forEach((b) => { b.onclick = () => abrirAba(b.dataset.aba); });
+document.querySelectorAll('[data-ir]').forEach((b) => { b.onclick = () => abrirAba(b.dataset.ir); });
+
+/* ---------- formulário de simulação ---------- */
+let regime = 'regime-normal';
+let itens = [];
+const cache = {};
+const hoje = () => new Date().toISOString().slice(0, 10);
+
+function aplicarRegime() {
+  document.querySelectorAll('#escolha-regime button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.regime === regime)));
+  document.querySelectorAll('.so-normal').forEach((n) => { n.hidden = regime !== 'regime-normal'; });
+  document.querySelectorAll('.so-simples').forEach((n) => { n.hidden = regime !== 'simples-nacional'; });
+  itens = []; novoItem(); desenharItens(); carregarListas();
+}
+document.querySelectorAll('#escolha-regime button').forEach((b) => { b.onclick = () => { regime = b.dataset.regime; aplicarRegime(); }; });
+$('f-doc').onchange = () => { if (regime === 'simples-nacional') { itens = []; novoItem(); desenharItens(); carregarListas(); } };
+$('f-data').onchange = () => carregarListas();
+
+const novoItem = () => itens.push({ tipo: regime === 'simples-nacional' && $('f-doc').value !== 'nfse' ? 'produto' : 'produto', descricao: '', codigo: '', classificacao: '', atividade: '', valor: '' });
+
+async function carregarUfs() {
+  if (!cache.ufs) { try { cache.ufs = lista(await json('/v1/dados/ufs')); } catch { cache.ufs = []; } }
+  const s = $('f-uf'); limpar(s);
+  s.append(el('option', { value: '' }, 'Escolha o estado'));
+  cache.ufs.slice().sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')).forEach((u) => s.append(el('option', { value: u.sigla }, u.nome)));
+}
+$('f-uf').onchange = async () => {
+  const uf = $('f-uf').value; const s = $('f-mun'); limpar(s);
+  if (!uf) { s.append(el('option', { value: '' }, 'Escolha o estado')); s.disabled = true; return; }
+  s.append(el('option', { value: '' }, 'Carregando…'));
+  try {
+    const ms = lista(await json('/v1/dados/ufs/municipios?siglaUf=' + encodeURIComponent(uf)));
+    limpar(s); s.append(el('option', { value: '' }, 'Escolha o município'));
+    ms.slice().sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')).forEach((m) => s.append(el('option', { value: String(m.codigo) }, m.nome)));
+    s.disabled = false;
+  } catch (e) { limpar(s); s.append(el('option', { value: '' }, 'Não foi possível carregar')); aviso('f-msg', e.message, 'err'); }
+};
+
+async function carregarListas() {
+  const d = $('f-data').value || hoje();
+  const k = 'cl' + d;
+  if (!cache[k]) { try { cache[k] = lista(await json('/v1/dados/classificacoes-tributarias/cbs-ibs?data=' + d)); } catch { cache[k] = []; } }
+  cache.atual = cache[k];
+  if (regime === 'simples-nacional') {
+    const tp = { nfe: '55', nfce: '65', nfse: '91' }[$('f-doc').value];
+    const ka = `at${d}${tp}`;
+    if (!cache[ka]) { try { cache[ka] = lista(await json(`/v1/simples-nacional/atividades?data=${d}&tpDoc=${tp}`)); } catch { cache[ka] = []; } }
+    cache.atividades = cache[ka];
+  }
+  desenharItens();
+}
+
+/* ---------- busca de produto/serviço por nome e conferência de cadastro ---------- */
+const catCache = {};
+async function catalogo(tipo, data) {
+  const k = tipo + data;
+  if (!catCache[k]) {
+    try { catCache[k] = lista(await json(tipo === 'servico' ? `/v1/dados/nbs/lista?data=${data}` : `/v1/dados/ncm/vigentes?data=${data}`)); } catch { return null; }
+  }
+  return catCache[k];
+}
+function buscarNoCatalogo(cat, texto, max = 8) {
+  const palavras = semAcento(texto).split(/\s+/).filter(Boolean);
+  const achados = [];
+  if (!palavras.length) return achados;
+  for (const c of cat) {
+    const alvo = semAcento(`${c.ncm || c.codigo || ''} ${c.descricao || ''}`);
+    if (palavras.every((p) => alvo.includes(p))) { achados.push(c); if (achados.length >= max) break; }
+  }
+  return achados;
+}
+function campoBusca(tipo, dataAtual, escolher, id) {
+  const saida = el('div', { class: 'achados' });
+  let espera;
+  const entrada = el('input', { id, autocomplete: 'off', placeholder: tipo === 'servico' ? 'Ex.: ensino fundamental' : 'Ex.: carne bovina' });
+  entrada.addEventListener('input', () => {
+    clearTimeout(espera);
+    espera = setTimeout(async () => {
+      limpar(saida);
+      const q = entrada.value.trim();
+      if (q.length < 3) return;
+      const cat = await catalogo(tipo, dataAtual());
+      if (!cat) { saida.append(el('div', { class: 'small mut' }, 'A lista de produtos não está disponível agora. Digite o código.')); return; }
+      const r = buscarNoCatalogo(cat, q);
+      if (!r.length) { saida.append(el('div', { class: 'small mut' }, 'Nada encontrado. Tente outras palavras.')); return; }
+      r.forEach((c) => {
+        const cod = String(c.ncm || c.codigo);
+        saida.append(el('button', { type: 'button', class: 'achado', onclick: () => { escolher(cod); limpar(saida); entrada.value = ''; } },
+          el('strong', {}, cod), ' – ', String(c.descricao || '').slice(0, 120)));
+      });
+    }, 250);
+  });
+  return el('div', {}, entrada, saida);
+}
+/* Pergunta à calculadora se a classificação vale para o código. Retorna true, false ou null (não deu para saber). */
+async function aplicavel(tipo, data, codigo, cls) {
+  const dig = String(codigo || '').replace(/\D/g, '');
+  if (!cls || dig.length !== (tipo === 'servico' ? 9 : 8)) return null;
+  const k = `ap${tipo}${data}${dig}${cls}`;
+  if (!(k in catCache)) {
+    const par = tipo === 'servico' ? 'nbs' : 'ncm';
+    try {
+      const r = await json(`/v1/dados/classificacoes-tributarias/${par}-aplicavel?cClassTrib=${encodeURIComponent(cls)}&${par}=${dig}&dataOcorrenciaFatoGerador=${data}`);
+      catCache[k] = typeof r.valido === 'boolean' ? r.valido : null;
+    } catch { return null; }
+  }
+  return catCache[k];
+}
+const TEXTO_NAO_APLICAVEL = 'A calculadora informa que essa classificação não se aplica a esse código. Você pode continuar, mas o resultado provavelmente terá erro. Confira o cadastro ou pergunte ao seu contador.';
+async function conferirItem(it, data, caixa) {
+  const ok = await aplicavel(it.tipo, data, it.codigo, it.classificacao);
+  caixa.hidden = ok !== false;
+  if (ok === false) caixa.textContent = TEXTO_NAO_APLICAVEL;
+}
+
+function campo(rotulo, dica, controle, id) {
+  return el('div', {}, el('label', { for: id }, rotulo, dica ? el('span', { class: 'hint' }, dica) : null), controle);
+}
+
+function desenharItens() {
+  const alvo = $('itens'); limpar(alvo);
+  const servicoFixo = regime === 'simples-nacional' && $('f-doc').value === 'nfse';
+  itens.forEach((it, i) => {
+    if (servicoFixo) it.tipo = 'servico';
+    const id = (n) => `i${i}-${n}`;
+    const tipo = el('select', { id: id('tipo'), onchange: (e) => { it.tipo = e.target.value; desenharItens(); } },
+      el('option', { value: 'produto', selected: it.tipo === 'produto' }, 'Produto (mercadoria)'),
+      el('option', { value: 'servico', selected: it.tipo === 'servico' }, 'Serviço'));
+    if (servicoFixo) tipo.disabled = true;
+    const classes = (cache.atual || []).map((c) => el('option', { value: c.codigo, selected: it.classificacao === c.codigo }, `${c.codigo} – ${c.descricao || c.descricaoTratamentoTributario || ''}`.slice(0, 120)));
+    const cls = el('select', { id: id('cls'), onchange: (e) => { it.classificacao = e.target.value; conferir(); } },
+      el('option', { value: '' }, classes.length ? 'Escolha a classificação' : 'Lista indisponível'), classes);
+    const linha1 = [
+      campo('Tipo', null, tipo, id('tipo')),
+      campo('Descrição (opcional)', 'Só para você identificar', el('input', { id: id('desc'), value: it.descricao, maxlength: 60, oninput: (e) => { it.descricao = e.target.value; } }), id('desc')),
+      campo(it.tipo === 'servico' ? 'Código NBS do serviço' : 'Código NCM do produto',
+        it.tipo === 'servico' ? '9 números, consta no cadastro do serviço' : '8 números, consta no cadastro do produto',
+        el('input', { id: id('cod'), value: it.codigo, inputmode: 'numeric', maxlength: 12, oninput: (e) => { it.codigo = e.target.value; }, onchange: () => conferir() }), id('cod')),
+      campo('Valor total (R$)', 'Valor do item na nota', el('input', { id: id('val'), value: it.valor, inputmode: 'decimal', placeholder: '0,00', oninput: (e) => { it.valor = e.target.value; } }), id('val')),
+    ];
+    const caixa = el('div', { class: 'msg warn small', id: id('aviso') }); caixa.hidden = true;
+    const dataForm = () => $('f-data').value || hoje();
+    const conferir = () => conferirItem(it, dataForm(), caixa);
+    const linhaBusca = [campo(it.tipo === 'servico' ? 'Não sabe o código? Busque pelo nome do serviço' : 'Não sabe o código? Busque pelo nome do produto', 'Digite 3 letras ou mais e escolha na lista',
+      campoBusca(it.tipo, dataForm, (cod) => { it.codigo = cod; $(id('cod')).value = cod; conferir(); }, id('busca')), id('busca'))];
+    const linha2 = [campo('Classificação tributária', 'Como esse item é tratado pela lei. Em caso de dúvida, pergunte ao seu contador.', cls, id('cls'))];
+    if (regime === 'simples-nacional') {
+      const ats = (cache.atividades || []).map((a) => el('option', { value: a.codigo, selected: it.atividade === a.codigo }, `${a.codigo} – ${a.descricao}${a.rotuloCurtoAnexo ? ' (Anexo ' + a.rotuloCurtoAnexo + ')' : ''}`.slice(0, 140)));
+      linha2.push(campo('Atividade no Simples Nacional', 'O anexo do Simples é definido pela atividade', el('select', { id: id('ativ'), onchange: (e) => { it.atividade = e.target.value; desenharAliquotas(); } },
+        el('option', { value: '' }, ats.length ? 'Escolha a atividade' : 'Lista indisponível'), ats), id('ativ')));
+    }
+    alvo.append(el('div', { class: 'item' },
+      el('div', { class: 'head' }, el('span', {}, `Item ${i + 1}`),
+        itens.length > 1 ? el('button', { class: 'link', type: 'button', onclick: () => { itens.splice(i, 1); desenharItens(); } }, 'Remover') : null),
+      el('div', { class: 'grid' }, linha1), el('div', { class: 'grid' }, linhaBusca), el('div', { class: 'grid' }, linha2), caixa));
+    if (it.codigo && it.classificacao) conferir();
+  });
+  $('add-item').hidden = servicoFixo;
+  desenharAliquotas();
+}
+
+/* Alíquotas efetivas do Simples: uma linha por anexo usado pelas atividades escolhidas. */
+const taxas = {};
+function anexoDaAtividade(cod) {
+  const a = (cache.atividades || []).find((x) => x.codigo === cod);
+  if (!a) return null;
+  return ($('f-fatorr').checked && a.anexoComFatorR) ? a.anexoComFatorR : (a.anexoSemFatorR || null);
+}
+function anexosNecessarios() {
+  return [...new Set(itens.map((it) => anexoDaAtividade(it.atividade)).filter(Boolean))].sort();
+}
+function desenharAliquotas() {
+  const alvo = $('bloco-aliquotas'); if (!alvo) return; limpar(alvo);
+  if (regime !== 'simples-nacional') return;
+  const anexos = anexosNecessarios();
+  if (!anexos.length) { alvo.append(el('p', { class: 'mut small' }, 'Escolha a atividade de cada item para informar as alíquotas efetivas do anexo correspondente.')); return; }
+  for (const a of anexos) {
+    taxas[a] = taxas[a] || { cbs: '', ibs: '' };
+    alvo.append(el('div', { class: 'grid' },
+      campo(`Alíquota efetiva de CBS (%) — Anexo ${a}`, 'Exemplo: 1,1612', el('input', { id: `r-${a}-cbs`, inputmode: 'decimal', placeholder: '0,0000', value: taxas[a].cbs, oninput: (e) => { taxas[a].cbs = e.target.value; } }), `r-${a}-cbs`),
+      campo(`Alíquota efetiva de IBS (%) — Anexo ${a}`, 'Exemplo: 0,0129', el('input', { id: `r-${a}-ibs`, inputmode: 'decimal', placeholder: '0,0000', value: taxas[a].ibs, oninput: (e) => { taxas[a].ibs = e.target.value; } }), `r-${a}-ibs`)));
+  }
+}
+$('f-fatorr').onchange = () => desenharAliquotas();
+$('add-item').onclick = () => { novoItem(); desenharItens(); };
+
+function montarEntrada() {
+  const base = { data: $('f-data').value, itens: itens.map((it) => ({ ...it })) };
+  if (regime === 'regime-normal') return { ...base, uf: $('f-uf').value, municipio: $('f-mun').value };
+  return {
+    ...base, documento: $('f-doc').value,
+    aliquotas: { porAnexo: Object.fromEntries(anexosNecessarios().map((a) => [a, { ...taxas[a] }])), impedimentoSublimite: $('f-sublimite').checked, fatorR: $('f-fatorr').checked ? true : (itens.some((it) => it.atividade === '09') ? false : undefined) },
+  };
+}
+
+$('calcular').onclick = async () => {
+  aviso('f-msg'); const b = $('calcular'); b.disabled = true; b.textContent = 'Calculando…';
+  try {
+    const r = await post('/v1/simulacoes/' + regime, montarEntrada());
+    mostrarResultado(r);
+  } catch (e) { aviso('f-msg', e.message, 'err'); }
+  b.disabled = false; b.textContent = 'Calcular tributos';
+};
+
+function kpi(rotulo, valor, principal) { return el('div', { class: 'kpi' + (principal ? ' main' : '') }, el('div', { class: 'v' }, dinheiro(valor)), el('div', { class: 'l' }, rotulo)); }
+
+function mostrarResultado(r) {
+  const alvo = $('passo-resultado'); limpar(alvo);
+  const t = r.totais;
+  const comIs = r.itens.some((i) => i.impostoSeletivo);
+  const temProblema = r.itens.some((i) => i.situacao === 'erro' || (i.mensagens || []).length);
+  const cabecalho = ['Item', 'Situação', 'Base', 'CBS', 'IBS'].concat(comIs ? ['Imp. Seletivo'] : [], ['Total']);
+  const linhas = r.itens.map((i) => el('tr', {},
+    el('td', {}, el('strong', {}, i.descricao), i.mensagens.map((m) => el('div', { class: 'small', style: 'color:var(--red)' }, m)),
+      i.reducaoPercentual ? el('div', { class: 'small mut' }, `Redução de ${pct.format(i.reducaoPercentual)}% na alíquota`) : null),
+    el('td', {}, el('span', { class: 'badge ' + i.situacao }, i.situacaoTexto)),
+    el('td', { class: 'n' }, dinheiro(i.base)), el('td', { class: 'n' }, dinheiro(i.cbs)), el('td', { class: 'n' }, dinheiro(i.ibs)),
+    comIs ? el('td', { class: 'n' }, dinheiro(i.impostoSeletivo)) : null,
+    el('td', { class: 'n' }, el('strong', {}, dinheiro(i.total)))));
+  alvo.append(el('div', { class: 'card' },
+    el('h2', {}, 'Resultado da simulação'),
+    (r.avisos || []).map((a) => el('div', { class: 'msg warn small' }, a)),
+    temProblema ? el('div', { class: 'msg err small' }, 'Algum item teve problema. Volte, corrija o código ou a classificação desse item (use a busca pelo nome, se precisar) e calcule de novo.') : null,
+    el('div', { class: 'totals' }, kpi('Total de tributos', t.total, true), kpi('CBS (federal)', t.cbs), kpi('IBS (estados e municípios)', t.ibs), comIs ? kpi('Imposto Seletivo', t.impostoSeletivo) : null),
+    el('div', { class: 'scroll' }, el('table', {}, el('thead', {}, el('tr', {}, cabecalho.map((c, k) => el('th', { class: k >= 2 ? 'n' : '' }, c)))), el('tbody', {}, linhas))),
+    el('div', { class: 'row noprint', style: 'margin-top:16px' },
+      el('button', { onclick: () => window.print() }, 'Imprimir ou salvar em PDF'),
+      temProblema ? el('button', { id: 'corrigir-sim', onclick: () => { $('passo-resultado').hidden = true; $('passo-form').hidden = false; window.scrollTo(0, 0); } }, 'Corrigir os dados e calcular de novo') : null,
+      el('button', { class: 'sec', onclick: () => { $('passo-resultado').hidden = true; $('passo-form').hidden = false; window.scrollTo(0, 0); } }, 'Fazer outra simulação'))));
+  $('passo-form').hidden = true; alvo.hidden = false; window.scrollTo(0, 0);
+  carregarUsoResumo();
+}
+
+
+/* ---------- lote (planilha CSV) ---------- */
+let loteRegime = 'regime-normal';
+let loteOps = [];            // operações prontas para enviar
+let loteProblemasLeitura = []; // linhas que não deu para ler
+let loteRes = [];            // resultados atuais (podem ser corrigidos na tela)
+let editando = null;         // operação com o editor aberto
+const semAcento = (t) => String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+
+const COLUNAS = {
+  'regime-normal': ['documento', 'data', 'uf', 'municipio', 'tipo', 'codigo', 'classificacao', 'valor', 'descricao'],
+  'simples-nacional': ['documento', 'data', 'tipo_nota', 'aliquota_cbs', 'aliquota_ibs', 'fator_r', 'ultrapassou_sublimite', 'tipo', 'codigo', 'classificacao', 'atividade', 'valor', 'descricao'],
+};
+const EXEMPLOS = {
+  'regime-normal': [
+    ['NF-001', '10/03/2027', 'AC', 'Rio Branco', 'servico', '122011200', '200028', '1200,00', 'Mensalidade escolar'],
+    ['NF-002', '10/03/2027', 'AC', 'Rio Branco', 'produto', '02013000', '000001', '80,00', 'Carne'],
+  ],
+  'simples-nacional': [
+    ['NF-001', '10/03/2027', 'nfe', '1,1612', '0,0129', 'nao', 'nao', 'produto', '22030000', '000001', '01', '10000,00', 'Cerveja'],
+  ],
+};
+
+function lerCsv(texto) {
+  const t = texto.replace(/^﻿/, '');
+  const primeira = t.split(/\r?\n/, 1)[0] || '';
+  const sep = (primeira.match(/;/g) || []).length >= (primeira.match(/,/g) || []).length ? ';' : ',';
+  const linhas = []; let linha = []; let campo = ''; let aspas = false;
+  for (let i = 0; i < t.length; i++) {
+    const c = t[i];
+    if (aspas) { if (c === '"') { if (t[i + 1] === '"') { campo += '"'; i++; } else aspas = false; } else campo += c; }
+    else if (c === '"') aspas = true;
+    else if (c === sep) { linha.push(campo); campo = ''; }
+    else if (c === '\n' || c === '\r') { if (c === '\r' && t[i + 1] === '\n') i++; linha.push(campo); linhas.push(linha); linha = []; campo = ''; }
+    else campo += c;
+  }
+  if (campo !== '' || linha.length) { linha.push(campo); linhas.push(linha); }
+  return linhas;
+}
+
+function dataIso(v) {
+  const t = String(v || '').trim();
+  let m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t); if (m) return t;
+  m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(t); if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  return null;
+}
+
+const munCache = {};
+async function codigoMunicipio(uf, nome) {
+  const n = String(nome || '').trim();
+  if (/^\d{7}$/.test(n)) return n;
+  if (!munCache[uf]) { try { munCache[uf] = lista(await json('/v1/dados/ufs/municipios?siglaUf=' + encodeURIComponent(uf))); } catch { munCache[uf] = []; } }
+  const achado = munCache[uf].find((m) => semAcento(m.nome) === semAcento(n));
+  return achado ? String(achado.codigo) : null;
+}
+
+const sim = (t) => ['sim', 's', 'true', '1'].includes(semAcento(t));
+const ativCache = {};
+async function atividadesDoLote(data, tp) {
+  const k = data + tp;
+  if (!ativCache[k]) { try { ativCache[k] = lista(await json(`/v1/simples-nacional/atividades?data=${data}&tpDoc=${tp}`)); } catch { ativCache[k] = []; } }
+  return ativCache[k];
+}
+
+async function prepararLote(texto) {
+  const linhas = lerCsv(texto).filter((l) => l.some((c) => String(c).trim() !== ''));
+  if (linhas.length < 2) throw new Error('A planilha está vazia ou só tem o cabeçalho.');
+  const cab = linhas[0].map((c) => semAcento(c).replace(/\s+/g, '_'));
+  const faltando = COLUNAS[loteRegime].filter((c) => !['documento', 'descricao', 'ultrapassou_sublimite', 'fator_r'].includes(c) && !cab.includes(c));
+  if (faltando.length) throw new Error('Faltam colunas na planilha: ' + faltando.join(', ') + '. Baixe o modelo para conferir.');
+  const idx = Object.fromEntries(cab.map((c, i) => [c, i]));
+  const v = (l, c) => (idx[c] === undefined ? '' : String(l[idx[c]] ?? '').trim());
+
+  const grupos = []; const mapa = new Map(); const problemas = [];
+  for (let i = 1; i < linhas.length; i++) {
+    const l = linhas[i]; const numero = i + 1; // 1 = cabeçalho
+    const doc = v(l, 'documento');
+    const tipoTxt = semAcento(v(l, 'tipo'));
+    const tipo = tipoTxt.startsWith('serv') ? 'servico' : tipoTxt.startsWith('prod') ? 'produto' : null;
+    const data = dataIso(v(l, 'data'));
+    if (!tipo) { problemas.push({ linha: numero, documento: doc, mensagem: 'Tipo deve ser "produto" ou "servico".' }); continue; }
+    if (!data) { problemas.push({ linha: numero, documento: doc, mensagem: 'Data inválida. Use dia/mês/ano, por exemplo 10/03/2027.' }); continue; }
+    const item = { tipo, descricao: v(l, 'descricao'), codigo: v(l, 'codigo'), classificacao: v(l, 'classificacao'), atividade: v(l, 'atividade'), valor: v(l, 'valor') };
+    const chave = doc ? `${doc}|${data}` : `linha-${numero}`;
+    let g = mapa.get(chave);
+    if (!g) {
+      g = { documento: doc || `Linha ${numero}`, linhas: [], itensLinhas: [], entrada: { data, itens: [] } };
+      if (loteRegime === 'regime-normal') {
+        const uf = v(l, 'uf').toUpperCase();
+        const cod = await codigoMunicipio(uf, v(l, 'municipio'));
+        if (!uf || !cod) { problemas.push({ linha: numero, documento: doc, mensagem: `Município "${v(l, 'municipio')}" não encontrado em ${uf || 'estado não informado'}.` }); continue; }
+        g.entrada.uf = uf; g.entrada.municipio = cod;
+      } else {
+        g.entrada.documento = semAcento(v(l, 'tipo_nota'));
+        g.entrada.aliquotas = { porAnexo: {}, impedimentoSublimite: sim(v(l, 'ultrapassou_sublimite')), fatorR: sim(v(l, 'fator_r')) };
+      }
+      mapa.set(chave, g); grupos.push(g);
+    }
+    if (loteRegime === 'simples-nacional') {
+      const tp = { nfe: '55', nfce: '65', nfse: '91' }[g.entrada.documento];
+      if (!tp) { problemas.push({ linha: numero, documento: doc, mensagem: 'Tipo de nota deve ser nfe, nfce ou nfse.' }); continue; }
+      const ativs = await atividadesDoLote(data, tp);
+      const cod = item.atividade.replace(/\D/g, '').padStart(2, '0');
+      const a = ativs.find((x) => x.codigo === cod);
+      if (!a) { problemas.push({ linha: numero, documento: doc, mensagem: `Atividade "${item.atividade}" não existe para esse tipo de nota e data.` }); continue; }
+      item.atividade = cod;
+      const anexo = (g.entrada.aliquotas.fatorR && a.anexoComFatorR) ? a.anexoComFatorR : a.anexoSemFatorR;
+      if (anexo) g.entrada.aliquotas.porAnexo[anexo] = { cbs: v(l, 'aliquota_cbs'), ibs: v(l, 'aliquota_ibs') };
+    }
+    g.linhas.push(numero); g.entrada.itens.push(item);
+  }
+  if (grupos.length > 500) throw new Error('A planilha tem mais de 500 operações. Divida em arquivos menores.');
+  return { grupos, problemas };
+}
+
+$('lote-regime').querySelectorAll('button').forEach((b) => { b.onclick = () => {
+  loteRegime = b.dataset.regime;
+  $('lote-regime').querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+  loteOps = []; limpar($('lote-previa')); aviso('lote-msg');
+}; });
+
+$('lote-modelo').onclick = () => {
+  const linhas = [COLUNAS[loteRegime], ...EXEMPLOS[loteRegime]].map((l) => l.join(';')).join('\r\n');
+  const a = el('a', { href: URL.createObjectURL(new Blob(['﻿' + linhas + '\r\n'], { type: 'text/csv;charset=utf-8' })), download: `modelo-lote-${loteRegime}.csv` });
+  document.body.append(a); a.click(); a.remove();
+};
+
+async function receberArquivo(f) {
+  aviso('lote-msg'); limpar($('lote-previa')); loteOps = [];
+  if (!f) return;
+  if (f.size > 2 * 1024 * 1024) return aviso('lote-msg', 'O arquivo tem mais de 2 MB. Divida em partes.', 'err');
+  aviso('lote-msg', 'Lendo a planilha…', 'warn');
+  try {
+    const { grupos, problemas } = await prepararLote(await f.text());
+    loteOps = grupos; loteProblemasLeitura = problemas; aviso('lote-msg');
+    const p = $('lote-previa');
+    p.append(el('div', { class: 'msg ok' }, `Planilha lida: ${grupos.length} operação(ões) pronta(s) para simular.`));
+    if (problemas.length) p.append(el('div', { class: 'msg warn small' }, `${problemas.length} linha(s) não puderam ser lidas e ficarão fora da simulação. Elas aparecerão na lista de problemas.`));
+    if (grupos.length) p.append(el('div', { class: 'row', style: 'margin-top:8px' }, el('button', { id: 'lote-enviar', onclick: processarLote }, `Simular ${grupos.length} operação(ões)`)));
+  } catch (e) { aviso('lote-msg', e.message, 'err'); }
+}
+$('lote-arquivo').onchange = (e) => receberArquivo(e.target.files[0]);
+const zona = $('lote-drop');
+['dragenter', 'dragover'].forEach((ev) => zona.addEventListener(ev, (e) => { e.preventDefault(); zona.classList.add('over'); }));
+['dragleave', 'drop'].forEach((ev) => zona.addEventListener(ev, (e) => { e.preventDefault(); zona.classList.remove('over'); }));
+zona.addEventListener('drop', (e) => receberArquivo(e.dataTransfer.files[0]));
+
+async function processarLote() {
+  const botao = $('lote-enviar'); botao.disabled = true;
+  const tam = 50; const todos = [];
+  try {
+    for (let i = 0; i < loteOps.length; i += tam) {
+      aviso('lote-msg', `Simulando… ${Math.min(i + tam, loteOps.length)} de ${loteOps.length}`, 'warn');
+      const parte = loteOps.slice(i, i + tam);
+      const r = await post('/v1/simulacoes/lote', { regime: loteRegime, operacoes: parte.map((g) => g.entrada) });
+      r.resultados.forEach((x) => todos.push({ grupo: parte[x.indice], ...x }));
+    }
+    aviso('lote-msg'); loteRes = todos; editando = null; mostrarLote(loteRes);
+  } catch (e) {
+    aviso('lote-msg', e.message + (todos.length ? ` As ${todos.length} primeiras operações foram simuladas e contadas na sua cota.` : ''), 'err');
+    botao.disabled = false;
+  }
+}
+
+function mostrarLote(res) {
+  const alvo = $('lote-resultado'); limpar(alvo);
+  let cbs = 0; let ibs = 0; let total = 0; let calculadas = 0;
+  const problemas = loteProblemasLeitura.map((p) => ({ ...p }));
+  const linhas = res.map((x) => {
+    const g = x.grupo; const t = x.ok ? x.resultado.totais : null;
+    let comProblema = !x.ok;
+    if (!x.ok) problemas.push({ linha: g.linhas.join(', '), documento: g.documento, mensagem: x.erro, g });
+    else {
+      x.resultado.itens.forEach((it, k) => { if (it.situacao === 'erro' || it.mensagens.length) { comProblema = true; problemas.push({ linha: g.linhas[k] ?? g.linhas[0], documento: g.documento, mensagem: (it.mensagens[0] || it.situacaoTexto), g }); } });
+      cbs += t.cbs || 0; ibs += t.ibs || 0; total += t.total || 0;
+    }
+    if (!comProblema) calculadas++;
+    return { g, t, comProblema };
+  });
+  alvo.append(el('div', { class: 'card' },
+    el('h2', {}, 'Resultado do lote'),
+    el('div', { class: 'msg warn small' }, 'Valores informativos. Itens com problema não entram nos totais até serem corrigidos. Use o botão Corrigir para ajustar na própria tela.'),
+    el('div', { class: 'totals' }, kpi('Total de tributos', total, true), kpi('CBS (federal)', cbs), kpi('IBS (estados e municípios)', ibs),
+      el('div', { class: 'kpi' }, el('div', { class: 'v' }, `${calculadas} de ${res.length}`), el('div', { class: 'l' }, 'Operações sem problemas'))),
+    el('div', { class: 'row noprint' },
+      el('button', { onclick: () => baixarResultadoCsv(linhas) }, '⇩ Baixar resultado (CSV)'),
+      el('button', { class: 'sec', onclick: baixarPlanilhaCorrigida }, '⇩ Baixar planilha corrigida'),
+      el('button', { class: 'sec', onclick: () => window.print() }, 'Imprimir'),
+      el('button', { class: 'sec', onclick: () => { alvo.hidden = true; $('lote-form').hidden = false; limpar($('lote-previa')); $('lote-arquivo').value = ''; loteOps = []; } }, 'Novo lote'))));
+  if (problemas.length) {
+    alvo.append(el('div', { class: 'card' }, el('h2', {}, `Problemas encontrados (${problemas.length})`),
+      el('p', { class: 'mut small' }, 'Clique em Corrigir para ajustar na tela e recalcular. Linhas que não puderam ser lidas (sem botão) precisam ser corrigidas na planilha. O número indica a linha do arquivo.'),
+      problemas.map((p) => el('div', { class: 'prob' }, el('div', { class: 's' }, '!'),
+        el('div', { style: 'flex:1' }, el('strong', {}, `Linha ${p.linha}${p.documento ? ' · ' + p.documento : ''}`), el('div', { class: 'small', style: 'color:var(--red)' }, p.mensagem)),
+        p.g ? el('button', { class: 'sec noprint', onclick: () => { editando = p.g; mostrarLote(loteRes); } }, 'Corrigir') : null))));
+  }
+  alvo.append(el('div', { class: 'card' }, el('h2', {}, 'Operações'),
+    el('div', { class: 'scroll' }, el('table', {}, el('thead', {}, el('tr', {}, ['Documento', 'Data', 'Situação', 'CBS', 'IBS', 'Total', ''].map((c, k) => el('th', { class: k >= 3 && k < 6 ? 'n' : '' }, c)))),
+      el('tbody', {}, linhas.flatMap(({ g, t, comProblema }) => [el('tr', {},
+        el('td', {}, g.documento), el('td', {}, g.entrada.data.split('-').reverse().join('/')),
+        el('td', {}, el('span', { class: 'badge ' + (comProblema ? 'erro' : 'calculado') }, comProblema ? 'Com problema' : 'Calculado')),
+        el('td', { class: 'n' }, dinheiro(t?.cbs)), el('td', { class: 'n' }, dinheiro(t?.ibs)), el('td', { class: 'n' }, el('strong', {}, dinheiro(t?.total))),
+        el('td', { class: 'noprint' }, el('button', { class: 'link', onclick: () => { editando = editando === g ? null : g; mostrarLote(loteRes); } }, editando === g ? 'Fechar' : (comProblema ? 'Corrigir' : 'Editar')))),
+        editando === g ? el('tr', {}, el('td', { colspan: 7 }, editorOperacao(g))) : null].filter(Boolean)))))));
+  $('lote-form').hidden = true; alvo.hidden = false; window.scrollTo(0, 0);
+  carregarUsoResumo();
+}
+
+/* Anexo do Simples de um item do lote (usa a lista de atividades já carregada). */
+function anexoDoItem(g, it) {
+  const tp = { nfe: '55', nfce: '65', nfse: '91' }[g.entrada.documento];
+  const a = (ativCache[g.entrada.data + tp] || []).find((x) => x.codigo === it.atividade);
+  if (!a) return null;
+  return (g.entrada.aliquotas?.fatorR && a.anexoComFatorR) ? a.anexoComFatorR : (a.anexoSemFatorR || null);
+}
+
+/* Editor de uma operação do lote: corrige código, classificação, valor (e atividade no Simples) e recalcula. */
+function editorOperacao(g) {
+  const data = g.entrada.data;
+  const caixa = el('div', {}); const corpo = el('div', {});
+  const refazer = async () => {
+    const tp = { nfe: '55', nfce: '65', nfse: '91' }[g.entrada.documento];
+    const classes = cache['cl' + data] || (cache['cl' + data] = await json('/v1/dados/classificacoes-tributarias/cbs-ibs?data=' + data).then(lista).catch(() => []));
+    const ativs = loteRegime === 'simples-nacional' ? await atividadesDoLote(data, tp) : [];
+    limpar(corpo);
+    g.entrada.itens.forEach((it, k) => {
+      const aviso = el('div', { class: 'msg warn small' }); aviso.hidden = true;
+      const conferir = () => conferirItem(it, data, aviso);
+      const cod = el('input', { value: it.codigo, inputmode: 'numeric', maxlength: 12, 'aria-label': `Código do item ${k + 1}` });
+      cod.addEventListener('input', () => { it.codigo = cod.value; }); cod.addEventListener('change', conferir);
+      const cls = el('select', { 'aria-label': `Classificação do item ${k + 1}`, onchange: (e) => { it.classificacao = e.target.value; conferir(); } },
+        el('option', { value: '' }, 'Escolha'), classes.map((c) => el('option', { value: c.codigo, selected: it.classificacao === c.codigo }, `${c.codigo} – ${c.descricao || ''}`.slice(0, 110))));
+      if (it.classificacao && !classes.some((c) => c.codigo === it.classificacao)) cls.prepend(el('option', { value: it.classificacao, selected: true }, `${it.classificacao} (não consta na lista)`));
+      const val = el('input', { value: it.valor, inputmode: 'decimal', 'aria-label': `Valor do item ${k + 1}` });
+      val.addEventListener('input', () => { it.valor = val.value; });
+      const cels = [
+        campo(`Item ${k + 1} · linha ${g.linhas[k] ?? '?'}${it.descricao ? ' · ' + it.descricao : ''}`, it.tipo === 'servico' ? 'Código NBS' : 'Código NCM', cod),
+        campo('Buscar pelo nome', 'Escolha para preencher o código', campoBusca(it.tipo, () => data, (c) => { it.codigo = c; cod.value = c; conferir(); }, `ed-${k}-busca`)),
+        campo('Classificação', null, cls), campo('Valor (R$)', null, val)];
+      if (loteRegime === 'simples-nacional') {
+        cels.push(campo('Atividade', 'Define o anexo', el('select', { 'aria-label': `Atividade do item ${k + 1}`, onchange: (e) => { it.atividade = e.target.value; } },
+          el('option', { value: '' }, 'Escolha'), ativs.map((a) => el('option', { value: a.codigo, selected: it.atividade === a.codigo }, `${a.codigo} – ${a.descricao}`.slice(0, 110))))));
+      }
+      corpo.append(el('div', { class: 'item' }, el('div', { class: 'grid' }, cels), aviso));
+      if (it.codigo && it.classificacao) conferir();
+    });
+  };
+  refazer();
+  const recalcular = async (e) => {
+    const b = e.target; b.disabled = true; b.textContent = 'Calculando…'; limpar(caixa);
+    try {
+      if (loteRegime === 'simples-nacional') {
+        const antigas = Object.values(g.entrada.aliquotas.porAnexo)[0] || { cbs: '', ibs: '' };
+        const novo = {};
+        for (const it of g.entrada.itens) { const a = anexoDoItem(g, it); if (a) novo[a] = g.entrada.aliquotas.porAnexo[a] || { ...antigas }; }
+        g.entrada.aliquotas.porAnexo = novo;
+      }
+      let novoRes;
+      try { novoRes = { ok: true, resultado: await post('/v1/simulacoes/' + loteRegime, g.entrada) }; }
+      catch (err) { novoRes = { ok: false, erro: err.message }; }
+      const pos = loteRes.findIndex((x) => x.grupo === g);
+      if (pos >= 0) loteRes[pos] = { grupo: g, indice: loteRes[pos].indice, ...novoRes };
+      const comProblema = !novoRes.ok || novoRes.resultado.itens.some((i) => i.situacao === 'erro' || i.mensagens.length);
+      if (!comProblema) editando = null;
+      mostrarLote(loteRes);
+    } catch (err) { caixa.append(el('div', { class: 'msg err small' }, err.message)); b.disabled = false; b.textContent = 'Recalcular'; }
+  };
+  return el('div', { class: 'editor' }, el('strong', {}, `Corrigir ${g.documento}`), el('p', { class: 'mut small' }, 'Cada recálculo conta como 1 simulação na sua cota.'), corpo, caixa,
+    el('div', { class: 'row' }, el('button', { onclick: recalcular }, 'Recalcular'), el('button', { class: 'sec', onclick: () => { editando = null; mostrarLote(loteRes); } }, 'Cancelar')));
+}
+
+/* Planilha no mesmo formato do modelo, já com as correções feitas na tela. */
+function baixarPlanilhaCorrigida() {
+  const cel = (v) => String(v ?? '').replace(/;/g, ',').replace(/[\r\n]+/g, ' ');
+  const cab = COLUNAS[loteRegime];
+  const linhas = [];
+  for (const { grupo: g } of loteRes) {
+    const e = g.entrada;
+    for (const it of e.itens) {
+      const anexo = loteRegime === 'simples-nacional' ? anexoDoItem(g, it) : null;
+      const tx = (anexo && e.aliquotas.porAnexo[anexo]) || {};
+      const v = {
+        documento: g.documento, data: e.data.split('-').reverse().join('/'), uf: e.uf, municipio: e.municipio, tipo: it.tipo, codigo: it.codigo,
+        classificacao: it.classificacao, valor: it.valor, descricao: it.descricao, atividade: it.atividade,
+        tipo_nota: e.documento, aliquota_cbs: tx.cbs, aliquota_ibs: tx.ibs, fator_r: e.aliquotas?.fatorR ? 'sim' : 'nao', ultrapassou_sublimite: e.aliquotas?.impedimentoSublimite ? 'sim' : 'nao',
+      };
+      linhas.push(cab.map((c) => cel(v[c])).join(';'));
+    }
+  }
+  const a = el('a', { href: URL.createObjectURL(new Blob(['﻿' + [cab.join(';'), ...linhas].join('\r\n') + '\r\n'], { type: 'text/csv;charset=utf-8' })), download: 'planilha-corrigida.csv' });
+  document.body.append(a); a.click(); a.remove();
+}
+
+function baixarResultadoCsv(linhas) {
+  const num = (v) => (v === null || v === undefined ? '' : String(v).replace('.', ','));
+  const cel = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+  const corpo = [['documento', 'data', 'situacao', 'cbs', 'ibs', 'total'].join(';')].concat(linhas.map(({ g, t, comProblema }) =>
+    [g.documento, g.entrada.data, comProblema ? 'com problema' : 'calculado', num(t?.cbs), num(t?.ibs), num(t?.total)].map(cel).join(';'))).join('\r\n');
+  const a = el('a', { href: URL.createObjectURL(new Blob(['﻿' + corpo], { type: 'text/csv;charset=utf-8' })), download: 'resultado-lote.csv' });
+  document.body.append(a); a.click(); a.remove();
+}
+
+/* ---------- nota (DANFSe) ---------- */
+$('gerar').onclick = async () => {
+  const f = $('d-xml').files[0];
+  if (!f) return aviso('d-msg', 'Escolha o arquivo XML da nota.', 'err');
+  aviso('d-msg', 'Gerando o PDF…', 'warn'); $('gerar').disabled = true;
+  try {
+    const q = new URLSearchParams({ stc: $('d-stc').value, canhoto: $('d-canhoto').value });
+    const res = await api('/v1/danfse?' + q, { method: 'POST', headers: { 'content-type': 'application/xml' }, body: await f.arrayBuffer() });
+    if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d?.erro?.mensagem || 'Não foi possível gerar o PDF. Confira se o arquivo é uma NFS-e válida.'); }
+    const a = el('a', { href: URL.createObjectURL(await res.blob()), download: 'nota-servico.pdf' }); document.body.append(a); a.click(); a.remove();
+    aviso('d-msg', 'PDF gerado. O download começou.', 'ok');
+  } catch (e) { aviso('d-msg', e.message, 'err'); }
+  $('gerar').disabled = false;
+};
+
+/* ---------- histórico ---------- */
+const NOMES_SERVICO = { 'regime-regular': 'Simulação – regime normal', 'simples-nacional': 'Simulação – Simples Nacional', danfse: 'PDF de nota de serviço' };
+function linhaHistorico(e) {
+  return el('tr', {},
+    el('td', {}, new Date(e.criadoEm).toLocaleString('pt-BR')), el('td', {}, NOMES_SERVICO[e.servico] || e.servico),
+    el('td', {}, el('span', { class: 'badge ' + (e.status < 400 ? 'calculado' : 'erro') }, e.status < 400 ? 'Concluído' : 'Com problema')));
+}
+async function carregarHistorico() {
+  try {
+    const { eventos } = await json('/history?limite=50');
+    const corpo = $('h-lista'); limpar(corpo); $('h-vazio').hidden = eventos.length > 0;
+    eventos.forEach((e) => corpo.append(linhaHistorico(e)));
+  } catch (e) { /* sessão expirada tratada em api() */ }
+}
+
+/* ---------- conta ---------- */
+async function carregarUsoResumo() {
+  try {
+    const me = await json('/me');
+    $('quem').textContent = me.nome;
+    $('avatar').textContent = (me.nome || '?').trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase();
+    $('papel').textContent = 'Plano ' + (NOMES_PLANO[me.plano] || me.plano);
+    $('plano-pill').textContent = 'Plano ' + (NOMES_PLANO[me.plano] || me.plano);
+  } catch { /* ok */ }
+}
+
+function cartao(rotulo, valor, rodape) {
+  return el('div', { class: 'card stat' }, el('div', { class: 'l' }, rotulo), el('div', { class: 'v' }, valor), el('div', { class: 'f' }, rodape));
+}
+async function carregarInicio() {
+  try {
+    const [me, u, h] = await Promise.all([json('/me'), json('/usage'), json('/history?limite=50')]);
+    const fmt = (v) => (v.limite === null ? `${v.usado.toLocaleString('pt-BR')}` : `${v.usado.toLocaleString('pt-BR')} de ${v.limite.toLocaleString('pt-BR')}`);
+    const calc = u.uso.calculo || { usado: 0, limite: null }; const pdf = u.uso.danfse || { usado: 0, limite: null };
+    const comProblema = h.eventos.filter((e) => e.status >= 400).length;
+    const alvo = $('i-stats'); limpar(alvo);
+    alvo.append(
+      cartao('Simulações neste mês', fmt(calc), calc.limite === null ? 'Sem limite no seu plano' : 'Cota do plano ' + (NOMES_PLANO[me.plano] || me.plano)),
+      cartao('PDFs de nota neste mês', fmt(pdf), pdf.limite === null ? 'Sem limite no seu plano' : 'Cota do plano ' + (NOMES_PLANO[me.plano] || me.plano)),
+      cartao('Plano atual', NOMES_PLANO[me.plano] || me.plano, 'Veja os detalhes em Minha conta'),
+      cartao('Operações com problema', String(comProblema), `entre as últimas ${h.eventos.length} operações`));
+    const corpo = $('i-recentes'); limpar(corpo); $('i-vazio').hidden = h.eventos.length > 0;
+    h.eventos.slice(0, 5).forEach((e) => corpo.append(linhaHistorico(e)));
+  } catch { /* sessão expirada tratada em api() */ }
+}
+async function carregarConta() {
+  try {
+    const [me, u, k] = await Promise.all([json('/me'), json('/usage'), json('/keys')]);
+    $('c-plano').textContent = `Plano ${NOMES_PLANO[me.plano] || me.plano}`;
+    const alvo = $('uso'); limpar(alvo);
+    for (const [nome, v] of Object.entries(u.uso)) {
+      const p = v.limite ? Math.min(100, (v.usado / v.limite) * 100) : 0;
+      alvo.append(el('div', {}, `${nome === 'calculo' ? 'Simulações' : 'PDFs de nota'} neste mês: ${v.usado.toLocaleString('pt-BR')} de ${v.limite === null ? 'ilimitado' : v.limite.toLocaleString('pt-BR')}`,
+        el('div', { class: 'bar' }, el('i', { style: `width:${p}%` }))));
+    }
+    const corpo = $('k-lista'); limpar(corpo);
+    k.chaves.forEach((c) => corpo.append(el('tr', {}, el('td', {}, c.nome, ' ', el('span', { class: 'mut small' }, c.prefixo + '…')),
+      el('td', {}, c.revogada_em ? 'Revogada' : (c.ultimo_uso_em ? new Date(c.ultimo_uso_em).toLocaleDateString('pt-BR') : 'Nunca usada')),
+      el('td', {}, c.revogada_em ? null : el('button', { class: 'link', onclick: async () => { await api('/keys/' + c.id, { method: 'DELETE' }); carregarConta(); } }, 'Revogar')))));
+  } catch (e) { /* ok */ }
+}
+$('k-criar').onclick = async () => {
+  try {
+    const r = await post('/keys', { nome: $('k-nome').value });
+    const n = $('k-msg'); limpar(n);
+    n.append(el('div', { class: 'msg ok' }, 'Copie a chave agora. Ela não será mostrada de novo:', el('code', { class: 'key' }, r.chave)));
+    $('k-nome').value = ''; carregarConta();
+  } catch (e) { aviso('k-msg', e.message, 'err'); }
+};
+
+/* ---------- início ---------- */
+function iniciarApp() {
+  carregarUsoResumo();
+  if (!$('f-data').value) $('f-data').value = hoje();
+  carregarUfs(); aplicarRegime(); abrirAba('inicio');
+}
+modoEntrada(); render();
+</script>
 </body>
 </html>

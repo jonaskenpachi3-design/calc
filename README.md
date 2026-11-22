@@ -114,8 +114,10 @@ Fluxo completo para o cliente:
 1. Criar a conta (nome da empresa, e-mail, senha de 10 caracteres ou mais) e entrar. A primeira tela é a **Visão geral** (uso do mês e atividade recente).
 2. **Simular tributos:** escolher “regime normal” ou “Simples Nacional”, preencher a operação e os itens, clicar em **Calcular tributos**.
 3. **PDF da nota de serviço:** enviar o XML da NFS-e e baixar o DANFSe.
-4. **Simulador em lote:** baixar a planilha modelo, preencher uma linha por item, enviar o CSV (até 500 operações) e ver totais, problemas por linha e o resultado para baixar. Em cada operação com problema há o botão **Corrigir**: abre os itens na própria tela (com busca pelo nome do produto), recalcula e permite baixar a planilha já corrigida.
-5. **Busca por nome:** no formulário, o campo "Não sabe o código? Busque pelo nome" procura na lista oficial de NCM (produtos) ou NBS (serviços) vigente na data da operação. Se a classificação escolhida não se aplicar ao código, aparece um aviso (não bloqueia o cálculo).
+4. **Simulador em lote:** baixar a planilha modelo, preencher uma linha por item, enviar o CSV (até 500 operações) ou os XMLs das notas (NF-e, NFC-e e NFS-e, só regime normal) e ver totais, problemas por linha e o resultado para baixar. Em cada operação com problema há o botão **Corrigir**: abre os itens na própria tela (com busca pelo nome do produto), recalcula e permite baixar a planilha já corrigida.
+5. **Comparativos:** no lote do regime normal, a tabela "tributos atuais × CBS e IBS" usa o que a nota (XML) ou a coluna `tributos_atuais` da planilha informa, ou uma carga estimada (%) digitada por você. Numa simulação, o botão "Comparar com o Simples Nacional" (ou "com o regime regular") mantém os itens e pede só o que falta para rodar o outro regime.
+6. **Relatório com a marca do escritório:** em *Minha conta* o escritório informa nome, logotipo, cor e contato (salvos no navegador). Os botões "Relatório com a marca do escritório" abrem a impressão do navegador, de onde se salva em PDF.
+7. **Busca por nome:** no formulário, o campo "Não sabe o código? Busque pelo nome" procura na lista oficial de NCM (produtos) ou NBS (serviços) vigente na data da operação. Se a classificação escolhida não se aplicar ao código, aparece um aviso (não bloqueia o cálculo).
 5. **Minhas simulações:** consultar o histórico.
 6. **Minha conta:** ver plano, uso do mês e (escondidas) chaves de API para integração.
 
@@ -213,7 +215,10 @@ Leia antes de vender.
 - **Imposto Seletivo e compra governamental** não estão no formulário.
 - **Sem cobrança, sem recuperação de senha, sem confirmação de e-mail.**
 - **SQLite:** serve para uma instância. Para escalar, troque por PostgreSQL.
-- **Lote só por CSV**, sem XML, sem comparação com o modelo atual de tributos e sem relatório com a marca do escritório: veja o [roadmap](docs/PRODUTO-E-ROADMAP.md).
+- **XML no lote** só vale para o regime normal, e notas antigas sem o grupo de CBS e IBS vêm sem classificação tributária (completa-se na tela). Os layouts foram conferidos com os XMLs de exemplo da Receita, não com notas reais de clientes.
+- **Modelo atual (ICMS, ISS, PIS, COFINS):** nenhuma calculadora da Receita o calcula. O comparativo usa os valores informados na nota ou na planilha, é bruto (sem créditos) e, nas NFS-e, só conhece o ISS. Emitentes do Simples ficam fora (o DAS é único).
+- **Comparativo Simples × regular** soma só CBS e IBS: não inclui o restante do DAS nem os créditos do regime regular.
+- **Relatório em PDF** vem da impressão do navegador (sem servidor de PDF); a marca fica salva no navegador, não na conta, e não há gráficos além de barras simples.
 
 ## Licença das calculadoras oficiais
 

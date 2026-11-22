@@ -21,17 +21,17 @@ Legenda: ✅ existe · 🟡 parcial · 🗓️ planejado · ⛔ fora do escopo a
 | API única e normalizada | 🟡 | Ver acima. O formulário simplificado e o resultado legível já existem. |
 | Atualização garantida e versionamento | 🗓️ | Depende do pipeline de versões do item 1. |
 | Histórico e auditoria | 🟡 | Há histórico por conta. Faltam busca, memória de cálculo completa (o formulário só é guardado com `STORE_PAYLOADS=true`) e exportação de relatório. |
-| Processamento em lote (XML, CSV) | 🟡 | Planilha CSV de até 500 operações, uma regime por vez, com totais, lista de problemas por linha e resultado em CSV (`POST /v1/simulacoes/lote`). Faltam o envio de XMLs de NF-e/NFS-e e o processamento em segundo plano para lotes maiores. |
+| Processamento em lote (XML, CSV) | 🟡 | Planilha CSV de até 500 operações, uma regime por vez, com totais, lista de problemas por linha e resultado em CSV (`POST /v1/simulacoes/lote`). Aceita também XMLs de NF-e, NFC-e e NFS-e (regime normal; layouts conferidos com os exemplos da Receita). Falta XML para o Simples, ler XMLs dentro de ZIP e o processamento em segundo plano para lotes maiores. |
 | SLA e alta disponibilidade | 🗓️ | SQLite e uma instância. Para SLA: PostgreSQL, mais de uma instância do gateway, monitoramento e backups. |
 
 ## 3. Telas que vendem
 
 | Tela | Status | Situação real |
 |---|---|---|
-| Simulador de impacto em lote (comparar o modelo atual com CBS/IBS e comparar Simples com regime regular) | 🟡 | O lote por CSV já calcula CBS e IBS de muitas operações. Falta a comparação: o modelo atual (ICMS, ISS, PIS, COFINS) não é calculado por nenhum dos motores da Receita, e comparar Simples com regime regular exige rodar os dois sobre os mesmos dados. |
+| Simulador de impacto em lote (comparar o modelo atual com CBS/IBS e comparar Simples com regime regular) | 🟡 | Feito: tabela do modelo atual (valores vindos do XML, da coluna `tributos_atuais` ou de carga estimada) contra CBS e IBS, e comparação Simples × regime regular por simulação, mantendo os itens. Limites: o modelo atual não é calculado por nenhum motor da Receita (só informado); a comparação é bruta, sem créditos e sem a transição 2026–2033; Simples × regular compara só CBS e IBS. Falta comparar Simples × regular em lote. |
 | Auditoria de cadastro (NCM / classificação) | 🟡 | O lote lista, por linha da planilha, cada item que a calculadora recusou, com a mensagem em português; cada operação pode ser corrigida na tela (código com busca por nome, classificação, valor, atividade), recalculada e baixada em planilha corrigida. O formulário avisa quando a classificação não se aplica ao NCM/NBS. Faltam: validar contra a calculadora real, sugerir a classificação correta automaticamente, corrigir linhas ilegíveis (município inexistente etc.) e guardar o histórico de correções. |
 | DANFSe em lote com logotipo | 🟡 | Gera o PDF de uma nota por vez. Faltam lote e logotipo do cliente. |
-| Relatório “white-label” em PDF com a logo do escritório | 🗓️ | Hoje o resultado pode ser impresso pelo navegador, sem marca própria nem gráficos. |
+| Relatório “white-label” em PDF com a logo do escritório | 🟡 | Nome, logotipo, cor e contato do escritório no cabeçalho, com resumo, comparativo e barras simples; sai pela impressão do navegador (salvar em PDF). A marca fica salva no navegador, não na conta. Faltam PDF gerado no servidor, gráficos completos e modelos de relatório. |
 
 ## 4. Venda e aquisição (sugestões)
 
@@ -46,5 +46,5 @@ Estas são ideias de mercado, não funcionalidades:
 1. Validar com as calculadoras reais e corrigir o que a Receita rejeitar.
 2. ~~Fixar versões dos repositórios oficiais e limitar memória dos contêineres.~~ Feito; falta medir a memória com carga real.
 3. ~~Busca de produto por nome e correção de erros na própria tela (auditoria).~~ Feito; falta validar contra as calculadoras reais.
-4. Lote com XML, comparativo (modelo atual e CBS/IBS; Simples e regime regular) e relatório PDF com a marca do escritório. O lote por CSV já existe.
+4. ~~Lote com XML, comparativo (modelo atual e CBS/IBS; Simples e regime regular) e relatório PDF com a marca do escritório.~~ Feito nos limites descritos acima; falta validar com notas reais e com as calculadoras reais.
 5. Cobrança, recuperação de senha, PostgreSQL e monitoramento (pré-requisitos para vender com SLA).

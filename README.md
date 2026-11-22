@@ -223,6 +223,19 @@ Leia antes de vender.
 - **Avulso do DANFSe** (preencher dados sem XML) não existe: o gerador oficial só aceita o XML.
 - **Consulta de CNPJ** no cadastro de empresas usa APIs públicas chamadas direto pelo navegador.
 
+## Verificação com as calculadoras oficiais
+
+Os testes automáticos (`npm test`) usam calculadoras falsas. Antes de vender, rode o roteiro que usa as reais:
+
+```sh
+./scripts/setup.sh && docker compose up --build -d      # na raiz do projeto
+ADMIN_TOKEN=$(grep ADMIN_TOKEN .env | cut -d= -f2) node scripts/verificar-integracao.mjs
+```
+
+O script cria uma conta descartável, confere o formato de cada resposta real (tabelas, regime normal, Simples com uma conta conhecida, lote, DANFSe), roda uma carga e mede a memória de cada contêiner (pico, limite, reinícios, morte por falta de memória), sugerindo valores de `MEM_JAVA` e `JAVA_XMX`. Grava `integracao-resultado.json` com tudo; se algo falhar, envie esse arquivo. Opções: `--url`, `--xml nota.xml` (NFS-e autorizada para o DANFSe), `--total`, `--conc`. Sem `ADMIN_TOKEN`, a conta fica no plano gratuito e a carga estoura a cota.
+
+Ele ainda não foi executado contra as calculadoras reais (o ambiente de desenvolvimento não compila as imagens oficiais). Foi validado só contra as falsas. Os valores de memória do `docker-compose.yml` continuam sendo estimativas até esse roteiro rodar.
+
 ## Licença das calculadoras oficiais
 
 Os três repositórios da Receita Federal usados em `vendor/` são licenciados sob MIT. Mantenha os avisos de licença ao redistribuí-los.

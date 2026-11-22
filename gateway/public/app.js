@@ -44,7 +44,7 @@ router.addRoute('', () => renderApp());
 // Rotas das abas principais - se já no main app, só troca aba; senão renderiza app completo
 for (const aba of abasPrincipais) {
   router.addRoute(aba, () => {
-    if (state.empresaAtiva) {
+    if (state.empresaAtiva && document.getElementById('content')) {
       // Já no main app: só troca a aba ativa
       state.setAba(aba);
       renderActiveTab();

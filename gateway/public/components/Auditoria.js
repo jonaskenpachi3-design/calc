@@ -197,7 +197,7 @@ export class Auditoria {
       this.totalItens = data.total || 0;
       this.totalPaginas = data.totalPages || 1;
 
-      this.renderTabela();
+      await this.renderTabela();
       this.renderPaginacao();
       this.renderResumo();
       this.atualizarContadoresFiltros();
@@ -214,9 +214,10 @@ export class Auditoria {
     }
   }
 
-  renderTabela() {
+  async renderTabela() {
     const tbody = document.getElementById('tbody-auditoria');
     limpar(tbody);
+    const classificacoes = await this.getClassificacoes();
 
     if (this.itens.length === 0) {
       tbody.appendChild(el('tr', {},
@@ -275,7 +276,6 @@ export class Auditoria {
 
       // Classificação - editável (select)
       const classifCell = el('td', {});
-      const classificacoes = await this.getClassificacoes();
       const classifSelect = el('select', {
         style: 'width: 100%; min-width: 160px;',
         title: 'Selecione a classificação tributária'

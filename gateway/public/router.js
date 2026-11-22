@@ -67,6 +67,7 @@ export class Router {
 
     const query = new URLSearchParams(params).toString();
     const hash = `#/${aba}${query ? '?' + query : ''}`;
+    if (window.location.hash === hash) { this.handleHashChange(); return; } // mesma rota: o navegador não dispara hashchange
     window.location.hash = hash;
   }
 

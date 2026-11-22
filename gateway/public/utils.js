@@ -7,6 +7,8 @@
 // Formatadores
 export const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 export const pct = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 4 });
+/** Escapa texto para uso dentro de innerHTML (dados de empresa/CNPJ vêm de cadastro ou de APIs externas). */
+export const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 export const dinheiro = (v) => (v === null || v === undefined ? '—' : brl.format(v));
 export const numero = (v) => (v === null || v === undefined ? '' : String(v).replace('.', ','));
 export const semAcento = (t) => String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
@@ -193,7 +195,7 @@ export function criarModal(titulo, conteudo, botoes = []) {
 
   modal.innerHTML = `
     <div style="padding: 20px 24px; border-bottom: 1px solid var(--bd); display: flex; justify-content: space-between; align-items: center;">
-      <h2 style="margin: 0;">${titulo}</h2>
+      <h2 style="margin: 0;">${esc(titulo)}</h2>
       <button class="modal-close" style="background: none; border: none; font-size: 24px; cursor: pointer; color: var(--mut); line-height: 1;">×</button>
     </div>
     <div class="modal-body" style="padding: 24px; overflow-y: auto; flex: 1;"></div>

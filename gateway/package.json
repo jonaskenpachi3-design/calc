@@ -6,7 +6,7 @@
   "description": "Gateway SaaS que unifica as calculadoras RTC da Receita Federal (regime regular, Simples Nacional e DANFSe)",
   "engines": { "node": ">=22.13" },
   "scripts": {
-    "start": "node src/index.js",
+    "start": "node --env-file=.env src/index.js",
     "test": "node --test"
   }
 }

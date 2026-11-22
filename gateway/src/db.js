@@ -40,6 +40,21 @@ CREATE TABLE IF NOT EXISTS usage_events (
 );
 CREATE INDEX IF NOT EXISTS idx_usage_tenant_recurso_data
   ON usage_events (tenant_id, recurso, criado_em);
+
+-- Tabela de empresas do contador (multi-CNPJ)
+CREATE TABLE IF NOT EXISTS empresas (
+  cnpj TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL REFERENCES tenants(id),
+  razao_social TEXT NOT NULL,
+  nome_fantasia TEXT,
+  regime_atual TEXT NOT NULL,
+  cnae_principal TEXT,
+  endereco_json TEXT,
+  ultima_simulacao_at TEXT,
+  criado_em TEXT NOT NULL,
+  atualizado_em TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_empresas_tenant ON empresas(tenant_id);
 `;
 
 export function abrirBanco(caminho) {
@@ -84,6 +99,18 @@ function criarRepositorio(db) {
               payload, criado_em AS criadoEm
          FROM usage_events WHERE tenant_id = ? ORDER BY id DESC LIMIT ?`,
     ),
+    // Empresas (multi-CNPJ)
+    inserirEmpresa: db.prepare(
+      `INSERT INTO empresas (cnpj, tenant_id, razao_social, nome_fantasia, regime_atual, cnae_principal, endereco_json, criado_em, atualizado_em)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ),
+    atualizarEmpresa: db.prepare(
+      `UPDATE empresas SET razao_social = ?, nome_fantasia = ?, regime_atual = ?, cnae_principal = ?, endereco_json = ?, atualizado_em = ? WHERE cnpj = ? AND tenant_id = ?`
+    ),
+    empresaPorCnpj: db.prepare('SELECT * FROM empresas WHERE cnpj = ? AND tenant_id = ?'),
+    listarEmpresas: db.prepare('SELECT * FROM empresas WHERE tenant_id = ? ORDER BY atualizado_em DESC'),
+    atualizarUltimaSimulacao: db.prepare('UPDATE empresas SET ultima_simulacao_at = ?, atualizado_em = ? WHERE cnpj = ? AND tenant_id = ?'),
+    deletarEmpresa: db.prepare('DELETE FROM empresas WHERE cnpj = ? AND tenant_id = ?'),
   };
 
   return {
@@ -124,5 +151,19 @@ function criarRepositorio(db) {
     },
     contarUso: (tenantId, recurso, desdeIso) => Number(q.contarUso.get(tenantId, recurso, desdeIso).total),
     historico: (tenantId, limite) => q.historico.all(tenantId, limite),
+
+    // Empresas (multi-CNPJ)
+    criarEmpresa({ tenantId, cnpj, razao_social, nome_fantasia, regime_atual, cnae_principal, endereco_json }) {
+      const t = agora();
+      const limpo = String(cnpj).replace(/\D/g, '');
+      if (limpo.length !== 14) throw new Error('CNPJ deve ter 14 dígitos');
+      if (q.empresaPorCnpj.get(limpo, tenantId)) throw new Error('CNPJ já cadastrado para este contador');
+      q.inserirEmpresa.run(limpo, tenantId, razao_social, nome_fantasia || null, regime_atual, cnae_principal || null, endereco_json || null, t, t);
+      return { cnpj: limpo, tenant_id: tenantId, razao_social, nome_fantasia, regime_atual, cnae_principal, endereco_json, criada_em: t, atualizada_em: t };
+    },
+    listarEmpresas: (tenantId) => q.listarEmpresas.all(tenantId),
+    obterEmpresa: (tenantId, cnpj) => q.empresaPorCnpj.get(String(cnpj).replace(/\D/g, ''), tenantId),
+    atualizarUltimaSimulacao: (tenantId, cnpj) => q.atualizarUltimaSimulacao.run(agora(), agora(), String(cnpj).replace(/\D/g, ''), tenantId),
+    deletarEmpresa: (tenantId, cnpj) => q.deletarEmpresa.run(String(cnpj).replace(/\D/g, ''), tenantId).changes > 0,
   };
 }

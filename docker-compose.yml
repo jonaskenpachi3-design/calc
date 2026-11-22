@@ -1,3 +1,7 @@
+# Limites de memória: cada serviço tem teto de contêiner (mem_limit) e a JVM, um teto de heap menor
+# (-Xmx), para um serviço não derrubar os outros por falta de memória. Ajuste pelo .env:
+#   MEM_JAVA e JAVA_XMX (os dois serviços Java), MEM_DANFSE, MEM_GATEWAY.
+# Soma dos tetos padrão: cerca de 2,5 GiB. No Docker Desktop, dê ao menos 4 GiB ao Docker.
 # Somente o gateway publica porta. Os três serviços oficiais não têm autenticação
 # própria e ficam na rede interna.
 services:
@@ -15,6 +19,9 @@ services:
       context: ./vendor/calculadora-rtc-regime-regular
       dockerfile: ../../docker/java.Dockerfile
       args: { JAR: api-regime-geral.jar }
+    mem_limit: ${MEM_JAVA:-1g}
+    environment:
+      JAVA_TOOL_OPTIONS: "-Xms128m -Xmx${JAVA_XMX:-512m} -XX:+ExitOnOutOfMemoryError"
     volumes:
       - calc-db:/app/calculadora/db:ro
     depends_on:
@@ -26,6 +33,9 @@ services:
       context: ./vendor/calculadora-rtc-simples-nacional
       dockerfile: ../../docker/java.Dockerfile
       args: { JAR: api-simples-nacional.jar }
+    mem_limit: ${MEM_JAVA:-1g}
+    environment:
+      JAVA_TOOL_OPTIONS: "-Xms128m -Xmx${JAVA_XMX:-512m} -XX:+ExitOnOutOfMemoryError"
     volumes:
       - calc-db:/app/calculadora/db:ro
     depends_on:
@@ -34,13 +44,18 @@ services:
 
   danfse:
     build: ./vendor/calculadora-rtc-gerador-danfse
+    mem_limit: ${MEM_DANFSE:-192m}
+    environment:
+      GOMEMLIMIT: 150MiB
     restart: unless-stopped
 
   gateway:
     build: ./gateway
     ports:
       - "${PORT:-3000}:3000"
+    mem_limit: ${MEM_GATEWAY:-256m}
     environment:
+      NODE_OPTIONS: "--max-old-space-size=192"
       AUTH_SECRET: ${AUTH_SECRET:?defina AUTH_SECRET (32+ caracteres) no .env}
       ADMIN_TOKEN: ${ADMIN_TOKEN:?defina ADMIN_TOKEN no .env}
       STORE_PAYLOADS: ${STORE_PAYLOADS:-false}

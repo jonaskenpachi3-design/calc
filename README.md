@@ -86,7 +86,7 @@ powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
 docker compose up --build
 ```
 
-O script de preparação clona os três repositórios oficiais em `vendor/` e cria o arquivo `.env` com segredos aleatórios. A primeira subida leva de 10 a 20 minutos (compila Java e Go). Depois, abra <http://localhost:3000>.
+O script de preparação baixa os três repositórios oficiais em `vendor/`, **nas versões fixadas em `versoes.txt`**, e cria o arquivo `.env` com segredos aleatórios. A primeira subida leva de 10 a 20 minutos (compila Java e Go). Depois, abra <http://localhost:3000>.
 
 Para parar sem perder dados: `docker compose down`.
 
@@ -175,8 +175,8 @@ Os testes usam calculadoras falsas que respondem no formato documentado pela Rec
 - **Logs:** `docker compose logs -f gateway` (ou o nome de outro serviço).
 - **Backup:** copie o volume `saas-data` (contas, chaves, uso e histórico).
 - **Atualizar o sistema:** `git pull` e depois `docker compose up --build`.
-- **Atualizar as calculadoras da Receita:** rode de novo o script de preparação e `docker compose up --build`. Antes de produção, fixe as versões (tags) dos repositórios oficiais em `scripts/setup.*`, porque as regras mudam entre versões.
-- **Memória:** os dois serviços Java são os mais pesados. Em produção, defina limites de memória e da JVM (`-Xmx`).
+- **Versões das calculadoras da Receita:** ficam fixadas por commit em `versoes.txt`, então todo mundo roda a mesma versão. Para saber se saiu versão nova, rode `./scripts/verificar-atualizacoes.sh` (ou `scripts\verificar-atualizacoes.ps1` no Windows); ele só consulta, não altera nada. Para atualizar: troque o commit em `versoes.txt`, rode o script de preparação, `docker compose up --build`, teste as simulações e só então publique. As regras tributárias mudam entre versões.
+- **Memória:** cada serviço tem teto no `docker-compose.yml`: 1 GiB por serviço Java (heap de 512 MiB), 192 MiB para o DANFSe e 256 MiB para o gateway, cerca de 2,5 GiB no total. Ajuste pelo `.env` com `MEM_JAVA`, `JAVA_XMX`, `MEM_DANFSE` e `MEM_GATEWAY`. No Docker Desktop, dê ao menos 4 GiB ao Docker. Se um serviço estourar a memória, ele reinicia sozinho sem derrubar os outros.
 
 ## Segurança e privacidade
 

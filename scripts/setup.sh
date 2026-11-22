@@ -1,13 +1,20 @@
 #!/usr/bin/env sh
-# Baixa os três repositórios oficiais para vendor/ (sem modificá-los).
+# Baixa os três repositórios oficiais para vendor/ nas versões fixadas em versoes.txt (sem modificá-los).
 set -eu
 cd "$(dirname "$0")/.."
 mkdir -p vendor
-for r in calculadora-rtc-regime-regular calculadora-rtc-simples-nacional calculadora-rtc-gerador-danfse; do
-  if [ -d "vendor/$r/.git" ]; then
-    git -C "vendor/$r" pull --ff-only
+grep -v '^\s*#' versoes.txt | grep -v '^\s*$' | while read -r repo sha _; do
+  dir="vendor/$repo"
+  if [ ! -d "$dir/.git" ]; then
+    git init -q "$dir"
+    git -C "$dir" remote add origin "https://github.com/ReceitaFederal/$repo.git"
+  fi
+  if [ "$(git -C "$dir" rev-parse HEAD 2>/dev/null || true)" = "$sha" ]; then
+    echo "$repo: já está em ${sha%"${sha#???????}"}"
   else
-    git clone --depth 1 "https://github.com/ReceitaFederal/$r.git" "vendor/$r"
+    git -C "$dir" fetch -q --depth 1 origin "$sha"
+    git -C "$dir" checkout -q -f --detach FETCH_HEAD
+    echo "$repo: fixado em ${sha%"${sha#???????}"}"
   fi
 done
 [ -f .env ] || {

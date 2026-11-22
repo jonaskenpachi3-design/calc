@@ -9,9 +9,9 @@ Legenda: ✅ existe · 🟡 parcial · 🗓️ planejado · ⛔ fora do escopo a
 | Ponto | Status | Situação real |
 |---|---|---|
 | API única que roteia por regime (Simples ou regime regular) | 🟡 | O gateway expõe uma API única com autenticação, cota e histórico. A pessoa escolhe o regime na tela (`/v1/simulacoes/regime-normal` ou `/simples-nacional`). Falta guardar o perfil fiscal da conta e rotear sozinho. |
-| Memória: limites da JVM (`-Xmx`) e dimensionamento por contêiner | 🗓️ | Ainda não há limites configurados. Os dois serviços Java usam mais memória que o serviço em Go. Definir `JAVA_TOOL_OPTIONS=-Xmx...` e `mem_limit` no compose antes de produção. |
+| Memória: limites da JVM (`-Xmx`) e dimensionamento por contêiner | 🟡 | Configurado no compose: 1 GiB por serviço Java com heap de 512 MiB, 192 MiB no DANFSe e 256 MiB no gateway, ajustáveis pelo `.env`. Os valores são estimativas e ainda não foram medidos com carga real: observe `docker stats` num lote grande antes de produção. |
 | Contêineres oficiais sem estado | ✅ | Os três serviços não guardam dados do cliente. O histórico fica no banco do gateway. O XML e o PDF do DANFSe **não são guardados** de propósito (privacidade). Para guardar arquivos, é preciso adicionar armazenamento (S3 ou similar). |
-| Atualização das regras e das alíquotas | 🗓️ | `scripts/setup.*` baixa a versão mais recente dos repositórios oficiais. Falta fixar tags, monitorar novas versões (CI/CD) e permitir simular regras de datas anteriores com versão escolhida. Hoje a data da operação já vai para a calculadora; a versão do motor, não. |
+| Atualização das regras e das alíquotas | 🟡 | As versões oficiais estão fixadas por commit em `versoes.txt`, e `scripts/verificar-atualizacoes.*` avisa quando há versão nova. Falta o pipeline automático (CI/CD) que monitora, testa e publica imagens novas, e permitir simular regras de datas anteriores com versão escolhida. Hoje a data da operação já vai para a calculadora; a versão do motor, não. |
 | Assinatura digital (certificado A1) e comunicação com SEFAZ / Ambiente Nacional | ⛔ | O sistema calcula e gera o PDF; não emite nem transmite notas. Se isso entrar, deve ser um serviço separado. |
 
 ## 2. O que justifica a assinatura
@@ -44,7 +44,7 @@ Estas são ideias de mercado, não funcionalidades:
 ## 5. Ordem sugerida de trabalho
 
 1. Validar com as calculadoras reais e corrigir o que a Receita rejeitar.
-2. Fixar versões dos repositórios oficiais e limitar memória dos contêineres.
+2. ~~Fixar versões dos repositórios oficiais e limitar memória dos contêineres.~~ Feito; falta medir a memória com carga real.
 3. Busca de produto por nome e correção de erros na própria tela (auditoria).
 4. Lote com XML, comparativo (modelo atual e CBS/IBS; Simples e regime regular) e relatório PDF com a marca do escritório. O lote por CSV já existe.
 5. Cobrança, recuperação de senha, PostgreSQL e monitoramento (pré-requisitos para vender com SLA).

@@ -114,7 +114,8 @@ Fluxo completo para o cliente:
 1. Criar a conta (nome da empresa, e-mail, senha de 10 caracteres ou mais) e entrar. A primeira tela é a **Visão geral** (uso do mês e atividade recente).
 2. **Simular tributos:** escolher “regime normal” ou “Simples Nacional”, preencher a operação e os itens, clicar em **Calcular tributos**.
 3. **PDF da nota de serviço:** enviar o XML da NFS-e e baixar o DANFSe.
-4. **Simulador em lote:** baixar a planilha modelo, preencher uma linha por item, enviar o CSV (até 500 operações) e ver totais, problemas por linha e o resultado para baixar.
+4. **Simulador em lote:** baixar a planilha modelo, preencher uma linha por item, enviar o CSV (até 500 operações) e ver totais, problemas por linha e o resultado para baixar. Em cada operação com problema há o botão **Corrigir**: abre os itens na própria tela (com busca pelo nome do produto), recalcula e permite baixar a planilha já corrigida.
+5. **Busca por nome:** no formulário, o campo "Não sabe o código? Busque pelo nome" procura na lista oficial de NCM (produtos) ou NBS (serviços) vigente na data da operação. Se a classificação escolhida não se aplicar ao código, aparece um aviso (não bloqueia o cálculo).
 5. **Minhas simulações:** consultar o histórico.
 6. **Minha conta:** ver plano, uso do mês e (escondidas) chaves de API para integração.
 
@@ -207,7 +208,7 @@ Leia antes de vender.
 
 - **Validação com as calculadoras reais:** os contratos (campos enviados e lidos, nos dois regimes, nas tabelas e no DANFSe) foram conferidos contra o código-fonte oficial e os testes passam com calculadoras simuladas. Falta rodar simulações reais de ponta a ponta e ajustar o que a Receita rejeitar. Itens de classificação que exigem quantidade (monofasia) e o Imposto Seletivo ainda não têm campo no formulário.
 - **Alíquotas de referência:** os padrões são os do exemplo de teste, não a legislação final.
-- **Código do produto ou serviço:** o cliente precisa saber o NCM (8 números) ou NBS (9 números). Não há busca por nome.
+- **Código do produto ou serviço:** o cliente pode buscar pelo nome, mas a busca é por palavras na descrição oficial (não há sinônimos nem nome comercial). O aviso de classificação incompatível depende da resposta da calculadora oficial e ainda não foi testado contra ela.
 - **Simples Nacional:** a alíquota efetiva é informada pelo usuário (extrato do PGDAS-D); o sistema não a calcula. ISS retido e benefícios municipais usam padrões.
 - **Imposto Seletivo e compra governamental** não estão no formulário.
 - **Sem cobrança, sem recuperação de senha, sem confirmação de e-mail.**

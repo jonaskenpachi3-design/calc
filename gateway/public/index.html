@@ -141,6 +141,10 @@
   .drop h3 { margin:0 0 4px; }
   .steps { margin:0 0 14px; padding-left:20px; } .steps li { margin:4px 0; }
   .bar-wrap { height:8px; background:#edf1f4; border-radius:99px; overflow:hidden; margin:10px 0; }
+  .achados { margin-top:6px; }
+  .achado { display:block; width:100%; text-align:left; background:#fff; color:var(--ink,#16324a); border:1px solid var(--bd); border-radius:8px; padding:8px 10px; margin-bottom:4px; font-weight:400; min-height:0; box-shadow:none; font-size:13px; }
+  .achado:hover { border-color:var(--teal-d); }
+  .editor { background:#f9fcfd; border:1px solid var(--bd); border-radius:12px; padding:14px; margin:8px 0; }
   .prob { display:flex; gap:11px; padding:12px 0; border-bottom:1px solid #edf1f5; }
   .prob:last-child { border-bottom:0; }
   .prob .s { width:28px; height:28px; border-radius:9px; background:var(--red-soft); color:var(--red); display:grid; place-items:center; font-weight:800; flex:none; }
@@ -510,6 +514,69 @@ async function carregarListas() {
   desenharItens();
 }
 
+/* ---------- busca de produto/serviço por nome e conferência de cadastro ---------- */
+const catCache = {};
+async function catalogo(tipo, data) {
+  const k = tipo + data;
+  if (!catCache[k]) {
+    try { catCache[k] = lista(await json(tipo === 'servico' ? `/v1/dados/nbs/lista?data=${data}` : `/v1/dados/ncm/vigentes?data=${data}`)); } catch { return null; }
+  }
+  return catCache[k];
+}
+function buscarNoCatalogo(cat, texto, max = 8) {
+  const palavras = semAcento(texto).split(/\s+/).filter(Boolean);
+  const achados = [];
+  if (!palavras.length) return achados;
+  for (const c of cat) {
+    const alvo = semAcento(`${c.ncm || c.codigo || ''} ${c.descricao || ''}`);
+    if (palavras.every((p) => alvo.includes(p))) { achados.push(c); if (achados.length >= max) break; }
+  }
+  return achados;
+}
+function campoBusca(tipo, dataAtual, escolher, id) {
+  const saida = el('div', { class: 'achados' });
+  let espera;
+  const entrada = el('input', { id, autocomplete: 'off', placeholder: tipo === 'servico' ? 'Ex.: ensino fundamental' : 'Ex.: carne bovina' });
+  entrada.addEventListener('input', () => {
+    clearTimeout(espera);
+    espera = setTimeout(async () => {
+      limpar(saida);
+      const q = entrada.value.trim();
+      if (q.length < 3) return;
+      const cat = await catalogo(tipo, dataAtual());
+      if (!cat) { saida.append(el('div', { class: 'small mut' }, 'A lista de produtos não está disponível agora. Digite o código.')); return; }
+      const r = buscarNoCatalogo(cat, q);
+      if (!r.length) { saida.append(el('div', { class: 'small mut' }, 'Nada encontrado. Tente outras palavras.')); return; }
+      r.forEach((c) => {
+        const cod = String(c.ncm || c.codigo);
+        saida.append(el('button', { type: 'button', class: 'achado', onclick: () => { escolher(cod); limpar(saida); entrada.value = ''; } },
+          el('strong', {}, cod), ' – ', String(c.descricao || '').slice(0, 120)));
+      });
+    }, 250);
+  });
+  return el('div', {}, entrada, saida);
+}
+/* Pergunta à calculadora se a classificação vale para o código. Retorna true, false ou null (não deu para saber). */
+async function aplicavel(tipo, data, codigo, cls) {
+  const dig = String(codigo || '').replace(/\D/g, '');
+  if (!cls || dig.length !== (tipo === 'servico' ? 9 : 8)) return null;
+  const k = `ap${tipo}${data}${dig}${cls}`;
+  if (!(k in catCache)) {
+    const par = tipo === 'servico' ? 'nbs' : 'ncm';
+    try {
+      const r = await json(`/v1/dados/classificacoes-tributarias/${par}-aplicavel?cClassTrib=${encodeURIComponent(cls)}&${par}=${dig}&dataOcorrenciaFatoGerador=${data}`);
+      catCache[k] = typeof r.valido === 'boolean' ? r.valido : null;
+    } catch { return null; }
+  }
+  return catCache[k];
+}
+const TEXTO_NAO_APLICAVEL = 'A calculadora informa que essa classificação não se aplica a esse código. Você pode continuar, mas o resultado provavelmente terá erro. Confira o cadastro ou pergunte ao seu contador.';
+async function conferirItem(it, data, caixa) {
+  const ok = await aplicavel(it.tipo, data, it.codigo, it.classificacao);
+  caixa.hidden = ok !== false;
+  if (ok === false) caixa.textContent = TEXTO_NAO_APLICAVEL;
+}
+
 function campo(rotulo, dica, controle, id) {
   return el('div', {}, el('label', { for: id }, rotulo, dica ? el('span', { class: 'hint' }, dica) : null), controle);
 }
@@ -525,16 +592,21 @@ function desenharItens() {
       el('option', { value: 'servico', selected: it.tipo === 'servico' }, 'Serviço'));
     if (servicoFixo) tipo.disabled = true;
     const classes = (cache.atual || []).map((c) => el('option', { value: c.codigo, selected: it.classificacao === c.codigo }, `${c.codigo} – ${c.descricao || c.descricaoTratamentoTributario || ''}`.slice(0, 120)));
-    const cls = el('select', { id: id('cls'), onchange: (e) => { it.classificacao = e.target.value; } },
+    const cls = el('select', { id: id('cls'), onchange: (e) => { it.classificacao = e.target.value; conferir(); } },
       el('option', { value: '' }, classes.length ? 'Escolha a classificação' : 'Lista indisponível'), classes);
     const linha1 = [
       campo('Tipo', null, tipo, id('tipo')),
       campo('Descrição (opcional)', 'Só para você identificar', el('input', { id: id('desc'), value: it.descricao, maxlength: 60, oninput: (e) => { it.descricao = e.target.value; } }), id('desc')),
       campo(it.tipo === 'servico' ? 'Código NBS do serviço' : 'Código NCM do produto',
         it.tipo === 'servico' ? '9 números, consta no cadastro do serviço' : '8 números, consta no cadastro do produto',
-        el('input', { id: id('cod'), value: it.codigo, inputmode: 'numeric', maxlength: 12, oninput: (e) => { it.codigo = e.target.value; } }), id('cod')),
+        el('input', { id: id('cod'), value: it.codigo, inputmode: 'numeric', maxlength: 12, oninput: (e) => { it.codigo = e.target.value; }, onchange: () => conferir() }), id('cod')),
       campo('Valor total (R$)', 'Valor do item na nota', el('input', { id: id('val'), value: it.valor, inputmode: 'decimal', placeholder: '0,00', oninput: (e) => { it.valor = e.target.value; } }), id('val')),
     ];
+    const caixa = el('div', { class: 'msg warn small', id: id('aviso') }); caixa.hidden = true;
+    const dataForm = () => $('f-data').value || hoje();
+    const conferir = () => conferirItem(it, dataForm(), caixa);
+    const linhaBusca = [campo(it.tipo === 'servico' ? 'Não sabe o código? Busque pelo nome do serviço' : 'Não sabe o código? Busque pelo nome do produto', 'Digite 3 letras ou mais e escolha na lista',
+      campoBusca(it.tipo, dataForm, (cod) => { it.codigo = cod; $(id('cod')).value = cod; conferir(); }, id('busca')), id('busca'))];
     const linha2 = [campo('Classificação tributária', 'Como esse item é tratado pela lei. Em caso de dúvida, pergunte ao seu contador.', cls, id('cls'))];
     if (regime === 'simples-nacional') {
       const ats = (cache.atividades || []).map((a) => el('option', { value: a.codigo, selected: it.atividade === a.codigo }, `${a.codigo} – ${a.descricao}${a.rotuloCurtoAnexo ? ' (Anexo ' + a.rotuloCurtoAnexo + ')' : ''}`.slice(0, 140)));
@@ -544,7 +616,8 @@ function desenharItens() {
     alvo.append(el('div', { class: 'item' },
       el('div', { class: 'head' }, el('span', {}, `Item ${i + 1}`),
         itens.length > 1 ? el('button', { class: 'link', type: 'button', onclick: () => { itens.splice(i, 1); desenharItens(); } }, 'Remover') : null),
-      el('div', { class: 'grid' }, linha1), el('div', { class: 'grid' }, linha2)));
+      el('div', { class: 'grid' }, linha1), el('div', { class: 'grid' }, linhaBusca), el('div', { class: 'grid' }, linha2), caixa));
+    if (it.codigo && it.classificacao) conferir();
   });
   $('add-item').hidden = servicoFixo;
   desenharAliquotas();
@@ -599,6 +672,7 @@ function mostrarResultado(r) {
   const alvo = $('passo-resultado'); limpar(alvo);
   const t = r.totais;
   const comIs = r.itens.some((i) => i.impostoSeletivo);
+  const temProblema = r.itens.some((i) => i.situacao === 'erro' || (i.mensagens || []).length);
   const cabecalho = ['Item', 'Situação', 'Base', 'CBS', 'IBS'].concat(comIs ? ['Imp. Seletivo'] : [], ['Total']);
   const linhas = r.itens.map((i) => el('tr', {},
     el('td', {}, el('strong', {}, i.descricao), i.mensagens.map((m) => el('div', { class: 'small', style: 'color:var(--red)' }, m)),
@@ -610,10 +684,12 @@ function mostrarResultado(r) {
   alvo.append(el('div', { class: 'card' },
     el('h2', {}, 'Resultado da simulação'),
     (r.avisos || []).map((a) => el('div', { class: 'msg warn small' }, a)),
+    temProblema ? el('div', { class: 'msg err small' }, 'Algum item teve problema. Volte, corrija o código ou a classificação desse item (use a busca pelo nome, se precisar) e calcule de novo.') : null,
     el('div', { class: 'totals' }, kpi('Total de tributos', t.total, true), kpi('CBS (federal)', t.cbs), kpi('IBS (estados e municípios)', t.ibs), comIs ? kpi('Imposto Seletivo', t.impostoSeletivo) : null),
     el('div', { class: 'scroll' }, el('table', {}, el('thead', {}, el('tr', {}, cabecalho.map((c, k) => el('th', { class: k >= 2 ? 'n' : '' }, c)))), el('tbody', {}, linhas))),
     el('div', { class: 'row noprint', style: 'margin-top:16px' },
       el('button', { onclick: () => window.print() }, 'Imprimir ou salvar em PDF'),
+      temProblema ? el('button', { id: 'corrigir-sim', onclick: () => { $('passo-resultado').hidden = true; $('passo-form').hidden = false; window.scrollTo(0, 0); } }, 'Corrigir os dados e calcular de novo') : null,
       el('button', { class: 'sec', onclick: () => { $('passo-resultado').hidden = true; $('passo-form').hidden = false; window.scrollTo(0, 0); } }, 'Fazer outra simulação'))));
   $('passo-form').hidden = true; alvo.hidden = false; window.scrollTo(0, 0);
   carregarUsoResumo();
@@ -624,6 +700,8 @@ function mostrarResultado(r) {
 let loteRegime = 'regime-normal';
 let loteOps = [];            // operações prontas para enviar
 let loteProblemasLeitura = []; // linhas que não deu para ler
+let loteRes = [];            // resultados atuais (podem ser corrigidos na tela)
+let editando = null;         // operação com o editor aberto
 const semAcento = (t) => String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 
 const COLUNAS = {
@@ -774,7 +852,7 @@ async function processarLote() {
       const r = await post('/v1/simulacoes/lote', { regime: loteRegime, operacoes: parte.map((g) => g.entrada) });
       r.resultados.forEach((x) => todos.push({ grupo: parte[x.indice], ...x }));
     }
-    aviso('lote-msg'); mostrarLote(todos);
+    aviso('lote-msg'); loteRes = todos; editando = null; mostrarLote(loteRes);
   } catch (e) {
     aviso('lote-msg', e.message + (todos.length ? ` As ${todos.length} primeiras operações foram simuladas e contadas na sua cota.` : ''), 'err');
     botao.disabled = false;
@@ -788,9 +866,9 @@ function mostrarLote(res) {
   const linhas = res.map((x) => {
     const g = x.grupo; const t = x.ok ? x.resultado.totais : null;
     let comProblema = !x.ok;
-    if (!x.ok) problemas.push({ linha: g.linhas.join(', '), documento: g.documento, mensagem: x.erro });
+    if (!x.ok) problemas.push({ linha: g.linhas.join(', '), documento: g.documento, mensagem: x.erro, g });
     else {
-      x.resultado.itens.forEach((it, k) => { if (it.situacao === 'erro' || it.mensagens.length) { comProblema = true; problemas.push({ linha: g.linhas[k] ?? g.linhas[0], documento: g.documento, mensagem: (it.mensagens[0] || it.situacaoTexto) }); } });
+      x.resultado.itens.forEach((it, k) => { if (it.situacao === 'erro' || it.mensagens.length) { comProblema = true; problemas.push({ linha: g.linhas[k] ?? g.linhas[0], documento: g.documento, mensagem: (it.mensagens[0] || it.situacaoTexto), g }); } });
       cbs += t.cbs || 0; ibs += t.ibs || 0; total += t.total || 0;
     }
     if (!comProblema) calculadas++;
@@ -798,27 +876,116 @@ function mostrarLote(res) {
   });
   alvo.append(el('div', { class: 'card' },
     el('h2', {}, 'Resultado do lote'),
-    el('div', { class: 'msg warn small' }, 'Valores informativos. Itens com problema não entram nos totais até serem corrigidos na planilha.'),
+    el('div', { class: 'msg warn small' }, 'Valores informativos. Itens com problema não entram nos totais até serem corrigidos. Use o botão Corrigir para ajustar na própria tela.'),
     el('div', { class: 'totals' }, kpi('Total de tributos', total, true), kpi('CBS (federal)', cbs), kpi('IBS (estados e municípios)', ibs),
       el('div', { class: 'kpi' }, el('div', { class: 'v' }, `${calculadas} de ${res.length}`), el('div', { class: 'l' }, 'Operações sem problemas'))),
     el('div', { class: 'row noprint' },
       el('button', { onclick: () => baixarResultadoCsv(linhas) }, '⇩ Baixar resultado (CSV)'),
+      el('button', { class: 'sec', onclick: baixarPlanilhaCorrigida }, '⇩ Baixar planilha corrigida'),
       el('button', { class: 'sec', onclick: () => window.print() }, 'Imprimir'),
       el('button', { class: 'sec', onclick: () => { alvo.hidden = true; $('lote-form').hidden = false; limpar($('lote-previa')); $('lote-arquivo').value = ''; loteOps = []; } }, 'Novo lote'))));
   if (problemas.length) {
     alvo.append(el('div', { class: 'card' }, el('h2', {}, `Problemas encontrados (${problemas.length})`),
-      el('p', { class: 'mut small' }, 'Corrija estas linhas na planilha e envie de novo. A coluna indica a linha do arquivo.'),
+      el('p', { class: 'mut small' }, 'Clique em Corrigir para ajustar na tela e recalcular. Linhas que não puderam ser lidas (sem botão) precisam ser corrigidas na planilha. O número indica a linha do arquivo.'),
       problemas.map((p) => el('div', { class: 'prob' }, el('div', { class: 's' }, '!'),
-        el('div', {}, el('strong', {}, `Linha ${p.linha}${p.documento ? ' · ' + p.documento : ''}`), el('div', { class: 'small', style: 'color:var(--red)' }, p.mensagem))))));
+        el('div', { style: 'flex:1' }, el('strong', {}, `Linha ${p.linha}${p.documento ? ' · ' + p.documento : ''}`), el('div', { class: 'small', style: 'color:var(--red)' }, p.mensagem)),
+        p.g ? el('button', { class: 'sec noprint', onclick: () => { editando = p.g; mostrarLote(loteRes); } }, 'Corrigir') : null))));
   }
   alvo.append(el('div', { class: 'card' }, el('h2', {}, 'Operações'),
-    el('div', { class: 'scroll' }, el('table', {}, el('thead', {}, el('tr', {}, ['Documento', 'Data', 'Situação', 'CBS', 'IBS', 'Total'].map((c, k) => el('th', { class: k >= 3 ? 'n' : '' }, c)))),
-      el('tbody', {}, linhas.map(({ g, t, comProblema }) => el('tr', {},
+    el('div', { class: 'scroll' }, el('table', {}, el('thead', {}, el('tr', {}, ['Documento', 'Data', 'Situação', 'CBS', 'IBS', 'Total', ''].map((c, k) => el('th', { class: k >= 3 && k < 6 ? 'n' : '' }, c)))),
+      el('tbody', {}, linhas.flatMap(({ g, t, comProblema }) => [el('tr', {},
         el('td', {}, g.documento), el('td', {}, g.entrada.data.split('-').reverse().join('/')),
         el('td', {}, el('span', { class: 'badge ' + (comProblema ? 'erro' : 'calculado') }, comProblema ? 'Com problema' : 'Calculado')),
-        el('td', { class: 'n' }, dinheiro(t?.cbs)), el('td', { class: 'n' }, dinheiro(t?.ibs)), el('td', { class: 'n' }, el('strong', {}, dinheiro(t?.total))))))))));
+        el('td', { class: 'n' }, dinheiro(t?.cbs)), el('td', { class: 'n' }, dinheiro(t?.ibs)), el('td', { class: 'n' }, el('strong', {}, dinheiro(t?.total))),
+        el('td', { class: 'noprint' }, el('button', { class: 'link', onclick: () => { editando = editando === g ? null : g; mostrarLote(loteRes); } }, editando === g ? 'Fechar' : (comProblema ? 'Corrigir' : 'Editar')))),
+        editando === g ? el('tr', {}, el('td', { colspan: 7 }, editorOperacao(g))) : null].filter(Boolean)))))));
   $('lote-form').hidden = true; alvo.hidden = false; window.scrollTo(0, 0);
   carregarUsoResumo();
+}
+
+/* Anexo do Simples de um item do lote (usa a lista de atividades já carregada). */
+function anexoDoItem(g, it) {
+  const tp = { nfe: '55', nfce: '65', nfse: '91' }[g.entrada.documento];
+  const a = (ativCache[g.entrada.data + tp] || []).find((x) => x.codigo === it.atividade);
+  if (!a) return null;
+  return (g.entrada.aliquotas?.fatorR && a.anexoComFatorR) ? a.anexoComFatorR : (a.anexoSemFatorR || null);
+}
+
+/* Editor de uma operação do lote: corrige código, classificação, valor (e atividade no Simples) e recalcula. */
+function editorOperacao(g) {
+  const data = g.entrada.data;
+  const caixa = el('div', {}); const corpo = el('div', {});
+  const refazer = async () => {
+    const tp = { nfe: '55', nfce: '65', nfse: '91' }[g.entrada.documento];
+    const classes = cache['cl' + data] || (cache['cl' + data] = await json('/v1/dados/classificacoes-tributarias/cbs-ibs?data=' + data).then(lista).catch(() => []));
+    const ativs = loteRegime === 'simples-nacional' ? await atividadesDoLote(data, tp) : [];
+    limpar(corpo);
+    g.entrada.itens.forEach((it, k) => {
+      const aviso = el('div', { class: 'msg warn small' }); aviso.hidden = true;
+      const conferir = () => conferirItem(it, data, aviso);
+      const cod = el('input', { value: it.codigo, inputmode: 'numeric', maxlength: 12, 'aria-label': `Código do item ${k + 1}` });
+      cod.addEventListener('input', () => { it.codigo = cod.value; }); cod.addEventListener('change', conferir);
+      const cls = el('select', { 'aria-label': `Classificação do item ${k + 1}`, onchange: (e) => { it.classificacao = e.target.value; conferir(); } },
+        el('option', { value: '' }, 'Escolha'), classes.map((c) => el('option', { value: c.codigo, selected: it.classificacao === c.codigo }, `${c.codigo} – ${c.descricao || ''}`.slice(0, 110))));
+      if (it.classificacao && !classes.some((c) => c.codigo === it.classificacao)) cls.prepend(el('option', { value: it.classificacao, selected: true }, `${it.classificacao} (não consta na lista)`));
+      const val = el('input', { value: it.valor, inputmode: 'decimal', 'aria-label': `Valor do item ${k + 1}` });
+      val.addEventListener('input', () => { it.valor = val.value; });
+      const cels = [
+        campo(`Item ${k + 1} · linha ${g.linhas[k] ?? '?'}${it.descricao ? ' · ' + it.descricao : ''}`, it.tipo === 'servico' ? 'Código NBS' : 'Código NCM', cod),
+        campo('Buscar pelo nome', 'Escolha para preencher o código', campoBusca(it.tipo, () => data, (c) => { it.codigo = c; cod.value = c; conferir(); }, `ed-${k}-busca`)),
+        campo('Classificação', null, cls), campo('Valor (R$)', null, val)];
+      if (loteRegime === 'simples-nacional') {
+        cels.push(campo('Atividade', 'Define o anexo', el('select', { 'aria-label': `Atividade do item ${k + 1}`, onchange: (e) => { it.atividade = e.target.value; } },
+          el('option', { value: '' }, 'Escolha'), ativs.map((a) => el('option', { value: a.codigo, selected: it.atividade === a.codigo }, `${a.codigo} – ${a.descricao}`.slice(0, 110))))));
+      }
+      corpo.append(el('div', { class: 'item' }, el('div', { class: 'grid' }, cels), aviso));
+      if (it.codigo && it.classificacao) conferir();
+    });
+  };
+  refazer();
+  const recalcular = async (e) => {
+    const b = e.target; b.disabled = true; b.textContent = 'Calculando…'; limpar(caixa);
+    try {
+      if (loteRegime === 'simples-nacional') {
+        const antigas = Object.values(g.entrada.aliquotas.porAnexo)[0] || { cbs: '', ibs: '' };
+        const novo = {};
+        for (const it of g.entrada.itens) { const a = anexoDoItem(g, it); if (a) novo[a] = g.entrada.aliquotas.porAnexo[a] || { ...antigas }; }
+        g.entrada.aliquotas.porAnexo = novo;
+      }
+      let novoRes;
+      try { novoRes = { ok: true, resultado: await post('/v1/simulacoes/' + loteRegime, g.entrada) }; }
+      catch (err) { novoRes = { ok: false, erro: err.message }; }
+      const pos = loteRes.findIndex((x) => x.grupo === g);
+      if (pos >= 0) loteRes[pos] = { grupo: g, indice: loteRes[pos].indice, ...novoRes };
+      const comProblema = !novoRes.ok || novoRes.resultado.itens.some((i) => i.situacao === 'erro' || i.mensagens.length);
+      if (!comProblema) editando = null;
+      mostrarLote(loteRes);
+    } catch (err) { caixa.append(el('div', { class: 'msg err small' }, err.message)); b.disabled = false; b.textContent = 'Recalcular'; }
+  };
+  return el('div', { class: 'editor' }, el('strong', {}, `Corrigir ${g.documento}`), el('p', { class: 'mut small' }, 'Cada recálculo conta como 1 simulação na sua cota.'), corpo, caixa,
+    el('div', { class: 'row' }, el('button', { onclick: recalcular }, 'Recalcular'), el('button', { class: 'sec', onclick: () => { editando = null; mostrarLote(loteRes); } }, 'Cancelar')));
+}
+
+/* Planilha no mesmo formato do modelo, já com as correções feitas na tela. */
+function baixarPlanilhaCorrigida() {
+  const cel = (v) => String(v ?? '').replace(/;/g, ',').replace(/[\r\n]+/g, ' ');
+  const cab = COLUNAS[loteRegime];
+  const linhas = [];
+  for (const { grupo: g } of loteRes) {
+    const e = g.entrada;
+    for (const it of e.itens) {
+      const anexo = loteRegime === 'simples-nacional' ? anexoDoItem(g, it) : null;
+      const tx = (anexo && e.aliquotas.porAnexo[anexo]) || {};
+      const v = {
+        documento: g.documento, data: e.data.split('-').reverse().join('/'), uf: e.uf, municipio: e.municipio, tipo: it.tipo, codigo: it.codigo,
+        classificacao: it.classificacao, valor: it.valor, descricao: it.descricao, atividade: it.atividade,
+        tipo_nota: e.documento, aliquota_cbs: tx.cbs, aliquota_ibs: tx.ibs, fator_r: e.aliquotas?.fatorR ? 'sim' : 'nao', ultrapassou_sublimite: e.aliquotas?.impedimentoSublimite ? 'sim' : 'nao',
+      };
+      linhas.push(cab.map((c) => cel(v[c])).join(';'));
+    }
+  }
+  const a = el('a', { href: URL.createObjectURL(new Blob(['﻿' + [cab.join(';'), ...linhas].join('\r\n') + '\r\n'], { type: 'text/csv;charset=utf-8' })), download: 'planilha-corrigida.csv' });
+  document.body.append(a); a.click(); a.remove();
 }
 
 function baixarResultadoCsv(linhas) {

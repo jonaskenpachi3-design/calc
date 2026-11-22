@@ -29,7 +29,7 @@ Legenda: ✅ existe · 🟡 parcial · 🗓️ planejado · ⛔ fora do escopo a
 | Tela | Status | Situação real |
 |---|---|---|
 | Simulador de impacto em lote (comparar o modelo atual com CBS/IBS e comparar Simples com regime regular) | 🟡 | O lote por CSV já calcula CBS e IBS de muitas operações. Falta a comparação: o modelo atual (ICMS, ISS, PIS, COFINS) não é calculado por nenhum dos motores da Receita, e comparar Simples com regime regular exige rodar os dois sobre os mesmos dados. |
-| Auditoria de cadastro (NCM / classificação) | 🟡 | O lote já lista, por linha da planilha, cada item que a calculadora recusou, com a mensagem em português. Faltam busca por nome do produto e correção na própria tela com recálculo. |
+| Auditoria de cadastro (NCM / classificação) | 🟡 | O lote lista, por linha da planilha, cada item que a calculadora recusou, com a mensagem em português; cada operação pode ser corrigida na tela (código com busca por nome, classificação, valor, atividade), recalculada e baixada em planilha corrigida. O formulário avisa quando a classificação não se aplica ao NCM/NBS. Faltam: validar contra a calculadora real, sugerir a classificação correta automaticamente, corrigir linhas ilegíveis (município inexistente etc.) e guardar o histórico de correções. |
 | DANFSe em lote com logotipo | 🟡 | Gera o PDF de uma nota por vez. Faltam lote e logotipo do cliente. |
 | Relatório “white-label” em PDF com a logo do escritório | 🗓️ | Hoje o resultado pode ser impresso pelo navegador, sem marca própria nem gráficos. |
 
@@ -45,6 +45,6 @@ Estas são ideias de mercado, não funcionalidades:
 
 1. Validar com as calculadoras reais e corrigir o que a Receita rejeitar.
 2. ~~Fixar versões dos repositórios oficiais e limitar memória dos contêineres.~~ Feito; falta medir a memória com carga real.
-3. Busca de produto por nome e correção de erros na própria tela (auditoria).
+3. ~~Busca de produto por nome e correção de erros na própria tela (auditoria).~~ Feito; falta validar contra as calculadoras reais.
 4. Lote com XML, comparativo (modelo atual e CBS/IBS; Simples e regime regular) e relatório PDF com a marca do escritório. O lote por CSV já existe.
 5. Cobrança, recuperação de senha, PostgreSQL e monitoramento (pré-requisitos para vender com SLA).

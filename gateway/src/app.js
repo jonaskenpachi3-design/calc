@@ -363,7 +363,7 @@ export function criarApp(config, db) {
 
     // Tabelas oficiais do regime regular (lista fechada: o gateway não vira proxy aberto).
     // A maioria exige ?data=AAAA-MM-DD.
-    const mTab = /^\/v1\/(?:dados|tabelas)\/(ufs|ufs\/municipios|ncm|nbs|nbs\/lista|situacoes-tributarias\/(?:cbs-ibs|is)|classificacoes-tributarias\/(?:cbs-ibs|imposto-seletivo)|aliquota-uniao|aliquota-uf|aliquota-municipio|fundamentacoes-legais)$/.exec(pathname);
+    const mTab = /^\/v1\/(?:dados|tabelas)\/(ufs|ufs\/municipios|ncm|ncm\/vigentes|nbs|nbs\/lista|nbs-aplicaveis|classificacoes-tributarias\/(?:nbs|ncm-aplicavel|nbs-aplicavel)|situacoes-tributarias\/(?:cbs-ibs|is)|classificacoes-tributarias\/(?:cbs-ibs|imposto-seletivo)|aliquota-uniao|aliquota-uf|aliquota-municipio|fundamentacoes-legais)$/.exec(pathname);
     if (metodo === 'GET' && mTab) {
       return enviar(res, await consultar('regime-regular', `${up.regimeRegular}/api/calculadora/dados-abertos/${mTab[1]}${url.search}`));
     }

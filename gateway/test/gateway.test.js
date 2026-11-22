@@ -121,3 +121,21 @@ test('tabelas: só caminhos permitidos; serviço fora do ar vira 502', async () 
   assert.equal((await fetch(base + '/v1/tabelas/../../etc', { headers: auth })).status, 404);
   assert.equal((await fetch(base + '/v1/tabelas/admin', { headers: auth })).status, 404);
 });
+
+test('busca por nome e conferência de cadastro: endpoints liberados e encaminhados', async () => {
+  const t = await cadastrar('busca@b.com');
+  const auth = { authorization: `Bearer ${t}` };
+  const casos = [
+    ['/v1/dados/ncm/vigentes?data=2027-03-10', '/api/calculadora/dados-abertos/ncm/vigentes?data=2027-03-10'],
+    ['/v1/dados/nbs/lista?data=2027-03-10', '/api/calculadora/dados-abertos/nbs/lista?data=2027-03-10'],
+    ['/v1/dados/classificacoes-tributarias/ncm-aplicavel?cClassTrib=000001&ncm=02013000&dataOcorrenciaFatoGerador=2027-03-10', '/api/calculadora/dados-abertos/classificacoes-tributarias/ncm-aplicavel?cClassTrib=000001&ncm=02013000&dataOcorrenciaFatoGerador=2027-03-10'],
+    ['/v1/dados/classificacoes-tributarias/nbs-aplicavel?cClassTrib=200028&nbs=122011200&dataOcorrenciaFatoGerador=2027-03-10', '/api/calculadora/dados-abertos/classificacoes-tributarias/nbs-aplicavel?cClassTrib=200028&nbs=122011200&dataOcorrenciaFatoGerador=2027-03-10'],
+    ['/v1/dados/classificacoes-tributarias/nbs?nbs=122011200&data=2027-03-10', '/api/calculadora/dados-abertos/classificacoes-tributarias/nbs?nbs=122011200&data=2027-03-10'],
+  ];
+  for (const [rota, destino] of casos) {
+    chamadas.length = 0;
+    assert.equal((await fetch(base + rota, { headers: auth })).status, 200, rota);
+    assert.equal(chamadas.at(-1).url, destino);
+  }
+  assert.equal((await fetch(base + '/v1/dados/classificacoes-tributarias/outra', { headers: auth })).status, 404);
+});

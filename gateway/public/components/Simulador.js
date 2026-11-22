@@ -5,6 +5,7 @@
  * Busca NCM/NBS, validação classificação, cálculo CBS/IBS/IS
  */
 
+import { salvarAnalise } from '../analise.js';
 import { el, limpar, aviso, campo, dinheiro, pct, semAcento, debounce, toast, criarModal } from '../utils.js';
 
 export class Simulador {
@@ -313,6 +314,7 @@ export class Simulador {
     try {
       const r = await this.api.post('/v1/simulacoes/' + this.regime, this.montarEntrada());
       this.mostrarResultado(r);
+      salvarAnalise(this.api, this.state, { origem: 'simulacao', regime: this.regime, resultado: r });
     } catch (e) { aviso('f-msg', e.message, 'err'); }
     b.disabled = false; b.textContent = 'Calcular tributos';
   }

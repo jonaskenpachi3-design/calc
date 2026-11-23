@@ -15,7 +15,8 @@ CREATE TABLE IF NOT EXISTS users (
   tenant_id TEXT NOT NULL REFERENCES tenants(id),
   email TEXT NOT NULL UNIQUE,
   senha_hash TEXT NOT NULL,
-  criado_em TEXT NOT NULL
+  criado_em TEXT NOT NULL,
+  senha_alterada_em INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS api_keys (
   id TEXT PRIMARY KEY,
@@ -59,6 +60,22 @@ CREATE INDEX IF NOT EXISTS idx_empresas_tenant ON empresas(tenant_id);
 `;
 
 // Só totais agregados de cada análise: nunca guardamos as notas nem os itens do cliente.
+const SCHEMA_REDEFINICAO = `
+CREATE TABLE IF NOT EXISTS redefinicoes_senha (
+  token_hash TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  criado_em INTEGER NOT NULL,
+  expira_em INTEGER NOT NULL,
+  usado_em INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_redef_user ON redefinicoes_senha (user_id, criado_em);
+`;
+
+function migrarUsuarios(db) {
+  const colunas = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
+  if (colunas.length && !colunas.includes('senha_alterada_em')) db.exec('ALTER TABLE users ADD COLUMN senha_alterada_em INTEGER NOT NULL DEFAULT 0');
+}
+
 const SCHEMA_ANALISES = `
 CREATE TABLE IF NOT EXISTS analises (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -117,6 +134,8 @@ export function abrirBanco(caminho) {
   migrarEmpresas(db);
   db.exec(SCHEMA);
   db.exec(SCHEMA_ANALISES);
+  db.exec(SCHEMA_REDEFINICAO);
+  migrarUsuarios(db);
   return criarRepositorio(db);
 }
 
@@ -129,6 +148,13 @@ function criarRepositorio(db) {
       'INSERT INTO users (id, tenant_id, email, senha_hash, criado_em) VALUES (?, ?, ?, ?, ?)',
     ),
     userPorEmail: db.prepare('SELECT * FROM users WHERE email = ?'),
+    userPorId: db.prepare('SELECT * FROM users WHERE id = ?'),
+    inserirRedef: db.prepare('INSERT INTO redefinicoes_senha (token_hash, user_id, criado_em, expira_em) VALUES (?, ?, ?, ?)'),
+    contarRedef: db.prepare('SELECT COUNT(*) AS n FROM redefinicoes_senha WHERE user_id = ? AND criado_em >= ?'),
+    consumirRedef: db.prepare('UPDATE redefinicoes_senha SET usado_em = ? WHERE token_hash = ? AND usado_em IS NULL AND expira_em > ?'),
+    redefPorHash: db.prepare('SELECT * FROM redefinicoes_senha WHERE token_hash = ?'),
+    invalidarRedefs: db.prepare('UPDATE redefinicoes_senha SET usado_em = ? WHERE user_id = ? AND usado_em IS NULL'),
+    trocarSenha: db.prepare('UPDATE users SET senha_hash = ?, senha_alterada_em = ? WHERE id = ?'),
     tenantPorId: db.prepare('SELECT * FROM tenants WHERE id = ?'),
     atualizarPlano: db.prepare('UPDATE tenants SET plano = ? WHERE id = ?'),
     inserirChave: db.prepare(
@@ -201,6 +227,13 @@ function criarRepositorio(db) {
       return { tenantId, userId };
     },
     usuarioPorEmail: (email) => q.userPorEmail.get(email),
+    usuarioPorId: (id) => q.userPorId.get(id),
+    criarRedefinicao: (userId, tokenHash, ttlSegundos) => { const t = Date.now(); q.inserirRedef.run(tokenHash, userId, t, t + ttlSegundos * 1000); return t + ttlSegundos * 1000; },
+    redefinicoesRecentes: (userId, desdeMs) => q.contarRedef.get(userId, desdeMs).n,
+    /** Gasta o token (uso único): devolve o id do usuário ou null se não existe, expirou ou já foi usado. */
+    gastarRedefinicao: (tokenHash) => { const t = Date.now(); if (q.consumirRedef.run(t, tokenHash, t).changes !== 1) return null; return q.redefPorHash.get(tokenHash).user_id; },
+    /** Troca a senha, derruba as sessões anteriores e invalida outros links pendentes. */
+    redefinirSenha: (userId, senhaHash) => { const t = Date.now(); q.trocarSenha.run(senhaHash, t, userId); q.invalidarRedefs.run(t, userId); },
     tenantPorId: (id) => q.tenantPorId.get(id),
     definirPlano: (tenantId, plano) => q.atualizarPlano.run(plano, tenantId).changes > 0,
 

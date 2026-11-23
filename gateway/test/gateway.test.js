@@ -4,6 +4,7 @@ import http from 'node:http';
 import { loadConfig } from '../src/config.js';
 import { abrirBanco } from '../src/db.js';
 import { criarApp } from '../src/app.js';
+import { sha256 } from '../src/auth.js';
 
 let upstream, gateway, base, upBase, db;
 const chamadas = [];
@@ -27,7 +28,7 @@ before(async () => {
 
   db = abrirBanco(':memory:');
   const config = {
-    ...loadConfig({ AUTH_SECRET: 'x'.repeat(40), ADMIN_TOKEN: 'adm', RATE_LIMIT_PER_MINUTE: '1000', PUBLIC_DIR: '/nonexistent' }),
+    ...loadConfig({ AUTH_SECRET: 'x'.repeat(40), ADMIN_TOKEN: 'adm', RATE_LIMIT_PER_MINUTE: '1000', PUBLIC_DIR: '/nonexistent', PUBLIC_URL: 'https://app.exemplo.com', RESET_WEBHOOK_URL: `${upBase}/webhook`, RESET_WEBHOOK_TOKEN: 'segredo-webhook' }),
     upstream: { regimeRegular: upBase, simplesNacional: upBase, danfse: upBase, timeoutMs: 2000 },
   };
   gateway = criarApp(config, db);
@@ -203,4 +204,70 @@ test('dados do escritório: grava com login, recusa chave de API e logotipo inv�
   const k = await (await post('/keys', { nome: 'x' }, auth)).json();
   const viaChave = await fetch(base + '/me/escritorio', { method: 'PUT', headers: { authorization: `Bearer ${k.chave}`, 'content-type': 'application/json' }, body: '{}' });
   assert.equal(viaChave.status, 403);
+});
+
+test('recuperação de senha: link por webhook, uso único, sessões antigas derrubadas, limite por hora', async () => {
+  const sessaoAntiga = await cadastrar('esqueci@b.com');
+  const pedir = (email) => post('/auth/esqueci', { email });
+  const espera = () => new Promise((r) => setTimeout(r, 60));
+  const hooks = () => chamadas.filter((c) => c.url === '/webhook');
+
+  // e-mail inexistente: mesma resposta, nada enviado
+  chamadas.length = 0;
+  const desconhecido = await pedir('naoexiste@b.com');
+  assert.equal(desconhecido.status, 202);
+  const corpoDesconhecido = await desconhecido.json();
+  await espera();
+  assert.equal(hooks().length, 0);
+
+  // e-mail existente: mesma resposta, link entregue ao webhook
+  const conhecido = await pedir('esqueci@b.com');
+  assert.equal(conhecido.status, 202);
+  assert.deepEqual(await conhecido.json(), corpoDesconhecido);
+  await espera();
+  assert.equal(hooks().length, 1);
+  const entrega = JSON.parse(hooks()[0].corpo);
+  assert.equal(entrega.tipo, 'redefinicao_de_senha');
+  assert.equal(entrega.email, 'esqueci@b.com');
+  assert.match(entrega.link, /^https:\/\/app\.exemplo\.com\/#\/redefinir\?token=[\w-]{40,}$/);
+  const token = entrega.link.split('token=')[1];
+
+  // senha fraca e token inválido são recusados sem gastar o link
+  assert.equal((await post('/auth/redefinir', { token, senha: 'curta' })).status, 400);
+  assert.equal((await post('/auth/redefinir', { token: 'x'.repeat(43), senha: 'nova-senha-bem-longa' })).status, 400);
+
+  assert.equal((await fetch(base + '/me', { headers: { authorization: `Bearer ${sessaoAntiga}` } })).status, 200);
+  const trocou = await post('/auth/redefinir', { token, senha: 'nova-senha-bem-longa' });
+  assert.equal(trocou.status, 200);
+
+  // uso único; senha antiga não entra mais; nova entra; sessão anterior à troca é derrubada
+  assert.equal((await post('/auth/redefinir', { token, senha: 'outra-senha-bem-longa' })).status, 400);
+  assert.equal((await post('/auth/login', { email: 'esqueci@b.com', senha: 'senha-bem-longa' })).status, 401);
+  const login = await post('/auth/login', { email: 'esqueci@b.com', senha: 'nova-senha-bem-longa' });
+  assert.equal(login.status, 200);
+  assert.equal((await fetch(base + '/me', { headers: { authorization: `Bearer ${sessaoAntiga}` } })).status, 401);
+  assert.equal((await fetch(base + '/me', { headers: { authorization: `Bearer ${(await login.json()).token}` } })).status, 200);
+
+  // no máximo 3 pedidos por hora (o primeiro já foi gasto acima)
+  chamadas.length = 0;
+  for (let i = 0; i < 4; i++) await pedir('esqueci@b.com');
+  await espera();
+  assert.equal(hooks().length, 2, 'só mais 2 links dentro do limite de 3 por hora');
+});
+
+test('recuperação de senha: link expirado e caminho assistido do operador', async () => {
+  await cadastrar('expira@b.com');
+  const user = db.usuarioPorEmail('expira@b.com');
+  const velho = 'v'.repeat(43);
+  db.criarRedefinicao(user.id, sha256(velho), -1);
+  assert.equal((await post('/auth/redefinir', { token: velho, senha: 'nova-senha-bem-longa' })).status, 400);
+
+  const pedido = (cred, email) => fetch(base + '/admin/usuarios/redefinicao', { method: 'POST', headers: { authorization: `Bearer ${cred}`, 'content-type': 'application/json' }, body: JSON.stringify({ email }) });
+  assert.equal((await pedido('errado', 'expira@b.com')).status, 403);
+  assert.equal((await pedido('adm', 'ninguem@b.com')).status, 404);
+  const ok = await pedido('adm', 'expira@b.com');
+  assert.equal(ok.status, 200);
+  const { link } = await ok.json();
+  assert.equal((await post('/auth/redefinir', { token: link.split('token=')[1], senha: 'nova-senha-bem-longa' })).status, 200);
+  assert.equal((await post('/auth/login', { email: 'expira@b.com', senha: 'nova-senha-bem-longa' })).status, 200);
 });

@@ -105,6 +105,17 @@ Variáveis no arquivo `.env` (nunca vai para o git):
 | `STORE_PAYLOADS` | `true` guarda o formulário preenchido no histórico. Padrão `false`, por serem dados fiscais. |
 | `ALIQUOTA_CBS`, `ALIQUOTA_IBS_ESTADUAL`, `ALIQUOTA_IBS_MUNICIPAL` | Alíquotas nominais (%) exigidas pela calculadora para datas a partir de 2027. Padrão 8,8 / 0,05 / 0,05 (valores do exemplo de teste da Receita). **Confirme antes de mostrar a clientes.** |
 
+**Recuperação de senha.** O gateway não envia e-mail sozinho (não há SMTP embutido). Ao pedir "Esqueci minha senha", ele cria um link de uso único, válido por 1 hora, e o entrega de um destes jeitos:
+
+| Variável | Para que serve |
+|---|---|
+| `PUBLIC_URL` | Endereço público do sistema, usado para montar o link (ex.: `https://app.seudominio.com.br`). |
+| `RESET_WEBHOOK_URL` | Opcional. O gateway faz um POST JSON `{tipo, email, link, expira_em}` neste endereço (Zapier, n8n, sua função de e-mail). |
+| `RESET_WEBHOOK_TOKEN` | Opcional. Enviado como `Authorization: Bearer`. |
+| `RESET_TTL_SECONDS` | Validade do link. Padrão 3600. |
+
+Sem webhook, o operador gera o link e o repassa ao cliente: `curl -X POST $URL/admin/usuarios/redefinicao -H "Authorization: Bearer $ADMIN_TOKEN" -H 'content-type: application/json' -d '{"email":"cliente@x.com"}'`. O sistema responde igual exista ou não o e-mail, aceita 3 pedidos por hora por conta, guarda só o hash do link, e a troca encerra as sessões antigas.
+
 Outras variáveis do gateway (valores padrão em `gateway/src/config.js`): `PORT`, `DB_PATH`, `SESSION_TTL_SECONDS`, `UPSTREAM_REGIME_REGULAR`, `UPSTREAM_SIMPLES_NACIONAL`, `UPSTREAM_DANFSE`, limites de tamanho, `MAX_OPERACOES_LOTE` (padrão 200 por chamada) e `RATE_LIMIT_PER_MINUTE`.
 
 ## Uso

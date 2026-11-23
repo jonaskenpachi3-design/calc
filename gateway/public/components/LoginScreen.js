@@ -11,8 +11,14 @@ export class LoginScreen {
     this.state = state;
     this.api = api;
     this.router = router;
-    this.modoCadastro = false;
+    this.modo = 'login'; // login | cadastro | esqueci | redefinir
+    this.tokenRedef = null;
+    // Link de redefinição (#/redefinir?token=...): o token sai da barra de endereço assim que é lido.
+    const m = /^#\/redefinir\?token=([\w-]+)/.exec(window.location.hash);
+    if (m) { this.modo = 'redefinir'; this.tokenRedef = m[1]; window.history.replaceState(null, '', window.location.pathname + window.location.search); }
   }
+
+  get modoCadastro() { return this.modo === 'cadastro'; }
 
   render() {
     const section = el('section', { id: 'visitante' });
@@ -48,6 +54,7 @@ export class LoginScreen {
             <div class="row">
               <button id="a-enviar">Entrar</button>
               <button class="link" id="a-trocar">Ainda não tenho conta</button>
+              <button class="link" id="a-esqueci">Esqueci minha senha</button>
             </div>
             <div id="a-msg" role="alert"></div>
           </div>
@@ -65,35 +72,37 @@ export class LoginScreen {
     this.atualizarFormulario();
     this.carregarPlanos();
 
-    // Event listeners
     document.getElementById('a-trocar').onclick = () => {
-      this.modoCadastro = !this.modoCadastro;
+      this.modo = this.modo === 'login' ? 'cadastro' : 'login';
+      this.tokenRedef = null;
       aviso('a-msg');
       this.atualizarFormulario();
     };
+    document.getElementById('a-esqueci').onclick = () => { this.modo = 'esqueci'; aviso('a-msg'); this.atualizarFormulario(); };
 
     document.getElementById('a-enviar').onclick = async () => {
       const btn = document.getElementById('a-enviar');
       btn.disabled = true;
       try {
-        const emailEl = document.getElementById('a-email');
-        const senhaEl = document.getElementById('a-senha');
-        if (!emailEl || !senhaEl) {
-          throw new Error('Campos do formulário não encontrados. Tente recarregar a página.');
+        const valor = (id) => document.getElementById(id)?.value ?? '';
+        if (this.modo === 'esqueci') {
+          const r = await this.api.post('/auth/esqueci', { email: valor('a-email') });
+          aviso('a-msg', r.mensagem, 'ok');
+        } else if (this.modo === 'redefinir') {
+          if (valor('a-senha') !== valor('a-senha2')) throw new Error('As duas senhas precisam ser iguais.');
+          const r = await this.api.post('/auth/redefinir', { token: this.tokenRedef, senha: valor('a-senha') });
+          this.state.setToken(null); // a troca derruba qualquer sessão aberta
+          this.modo = 'login'; this.tokenRedef = null;
+          this.atualizarFormulario();
+          aviso('a-msg', r.mensagem, 'ok');
+        } else {
+          const corpo = { email: valor('a-email'), senha: valor('a-senha') };
+          if (this.modo === 'cadastro') corpo.nome = valor('a-nome');
+          const r = await this.api.post(this.modo === 'cadastro' ? '/auth/register' : '/auth/login', corpo);
+          this.state.setToken(r.token);
+          aviso('a-msg');
+          this.router.navigate('dashboard'); // Vai para seletor de empresas
         }
-        const corpo = {
-          email: emailEl.value,
-          senha: senhaEl.value
-        };
-        if (this.modoCadastro) {
-          const nomeEl = document.getElementById('a-nome');
-          if (nomeEl) corpo.nome = nomeEl.value;
-        }
-        const r = await this.api.post(this.modoCadastro ? '/auth/register' : '/auth/login', corpo);
-        this.state.setToken(r.token);
-        if (senhaEl) senhaEl.value = '';
-        aviso('a-msg');
-        this.router.navigate('dashboard'); // Vai para seletor de empresas
       } catch (e) {
         aviso('a-msg', e.message, 'err');
       }
@@ -102,38 +111,37 @@ export class LoginScreen {
   }
 
   atualizarFormulario() {
-    const titulo = document.getElementById('entrar-titulo');
+    const m = this.modo;
+    const textos = {
+      login: ['Bem-vindo(a) de volta', 'Entrar', 'Entrar', 'Ainda não tenho conta'],
+      cadastro: ['Comece agora', 'Criar conta gratuita', 'Criar conta', 'Já tenho conta'],
+      esqueci: ['Esqueceu a senha?', 'Recuperar senha', 'Enviar instruções', 'Voltar para entrar'],
+      redefinir: ['Quase lá', 'Criar nova senha', 'Salvar nova senha', 'Cancelar'],
+    }[m];
+    document.getElementById('entrar-eyebrow').textContent = textos[0];
+    document.getElementById('entrar-titulo').textContent = textos[1];
+    document.getElementById('a-enviar').textContent = textos[2];
+    document.getElementById('a-trocar').textContent = textos[3];
+    document.getElementById('a-esqueci').style.display = m === 'login' ? '' : 'none';
+
     const campoNome = document.getElementById('campo-nome');
-    const btnEnviar = document.getElementById('a-enviar');
-    const btnTrocar = document.getElementById('a-trocar');
-    const eyebrow = document.getElementById('entrar-eyebrow');
+    campoNome.innerHTML = '';
+    campoNome.style.display = m === 'cadastro' ? 'block' : 'none';
+    if (m === 'cadastro') campoNome.append(el('label', { for: 'a-nome' }, 'Nome da empresa'), el('input', { id: 'a-nome', autocomplete: 'organization' }));
 
-    titulo.textContent = this.modoCadastro ? 'Criar conta gratuita' : 'Entrar';
-    campoNome.style.display = this.modoCadastro ? 'block' : 'none';
-    btnEnviar.textContent = this.modoCadastro ? 'Criar conta' : 'Entrar';
-    btnTrocar.textContent = this.modoCadastro ? 'Já tenho conta' : 'Ainda não tenho conta';
-    eyebrow.textContent = this.modoCadastro ? 'Comece agora' : 'Bem-vindo(a) de volta';
-
-    // Renderizar campo nome se cadastro
-    if (this.modoCadastro) {
-      campoNome.innerHTML = '';
-      campoNome.append(el('label', { for: 'a-nome' }, 'Nome da empresa'),
-        el('input', { id: 'a-nome', autocomplete: 'organization' }));
-    } else {
-      campoNome.innerHTML = '';
-    }
-
-    // Renderizar campos email/senha
     const emailDiv = document.getElementById('campo-email');
     emailDiv.innerHTML = '';
-    emailDiv.append(el('label', { for: 'a-email' }, 'E-mail'),
-      el('input', { id: 'a-email', type: 'email', autocomplete: 'email', placeholder: 'voce@empresa.com.br' }));
+    emailDiv.style.display = m === 'redefinir' ? 'none' : '';
+    if (m !== 'redefinir') emailDiv.append(el('label', { for: 'a-email' }, 'E-mail'), el('input', { id: 'a-email', type: 'email', autocomplete: 'email', placeholder: 'voce@empresa.com.br' }));
 
     const senhaDiv = document.getElementById('campo-senha');
     senhaDiv.innerHTML = '';
-    senhaDiv.append(el('label', { for: 'a-senha' }, 'Senha ',
-      el('span', { class: 'hint' }, 'Mínimo de 10 caracteres')),
-      el('input', { id: 'a-senha', type: 'password', autocomplete: this.modoCadastro ? 'new-password' : 'current-password' }));
+    senhaDiv.style.display = m === 'esqueci' ? 'none' : '';
+    if (m !== 'esqueci') {
+      senhaDiv.append(el('label', { for: 'a-senha' }, m === 'redefinir' ? 'Nova senha ' : 'Senha ', el('span', { class: 'hint' }, 'Mínimo de 10 caracteres')),
+        el('input', { id: 'a-senha', type: 'password', autocomplete: m === 'login' ? 'current-password' : 'new-password' }));
+      if (m === 'redefinir') senhaDiv.append(el('label', { for: 'a-senha2', style: 'margin-top:10px;display:block' }, 'Repita a nova senha'), el('input', { id: 'a-senha2', type: 'password', autocomplete: 'new-password' }));
+    }
   }
 
   async carregarPlanos() {

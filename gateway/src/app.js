@@ -2,7 +2,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  hashSenha, conferirSenha, emitirToken, verificarToken, gerarChaveApi, sha256, compararSegredos,
+  hashSenha, conferirSenha, emitirToken, verificarToken, gerarChaveApi, sha256, compararSegredos, tokenAleatorio,
 } from './auth.js';
 import { PLANOS, limiteDoPlano, inicioDoMes } from './plans.js';
 import { chamar, CacheTtl } from './upstream.js';
@@ -100,6 +100,9 @@ export function criarApp(config, db) {
     }
     const claims = verificarToken(credencial, config.authSecret);
     if (!claims) throw new HttpError(401, 'token_invalido', 'Sessão inválida ou expirada');
+    // Sessões emitidas antes da última troca de senha deixam de valer.
+    const dono = db.usuarioPorId(claims.uid);
+    if (!dono || (claims.iat || 0) < dono.senha_alterada_em) throw new HttpError(401, 'token_invalido', 'Sessão inválida ou expirada');
     return { tenantId: claims.tid, userId: claims.uid, via: 'sessao' };
   }
 
@@ -237,6 +240,51 @@ export function criarApp(config, db) {
       if (!user || !ok) throw new HttpError(401, 'credenciais_invalidas', 'E-mail ou senha incorretos');
       const token = emitirToken({ tid: user.tenant_id, uid: user.id }, config.authSecret, config.sessionTtlSeconds);
       return responder(res, 200, { token });
+    }
+
+    // --- recuperação de senha ---
+    const linkDeRedefinicao = (userId) => {
+      const token = tokenAleatorio();
+      const expira = db.criarRedefinicao(userId, sha256(token), config.resetTtlSeconds);
+      return { link: `${config.publicUrl}/#/redefinir?token=${token}`, expira_em: new Date(expira).toISOString() };
+    };
+
+    if (metodo === 'POST' && pathname === '/auth/esqueci') {
+      const { email } = await lerJson(req, 2_000);
+      const resposta = { mensagem: 'Se este e-mail tiver cadastro, enviaremos as instruções para criar uma nova senha.' };
+      if (!emailValido(email)) return responder(res, 202, resposta);
+      const user = db.usuarioPorEmail(email.trim().toLowerCase());
+      // No máximo 3 pedidos por hora por conta; a resposta é a mesma existindo ou não o e-mail.
+      if (user && db.redefinicoesRecentes(user.id, Date.now() - 3600_000) < 3) {
+        const { link, expira_em: expiraEm } = linkDeRedefinicao(user.id);
+        if (config.resetWebhookUrl) {
+          fetch(config.resetWebhookUrl, {
+            method: 'POST', signal: AbortSignal.timeout(5000),
+            headers: { 'content-type': 'application/json', ...(config.resetWebhookToken ? { authorization: `Bearer ${config.resetWebhookToken}` } : {}) },
+            body: JSON.stringify({ tipo: 'redefinicao_de_senha', email: user.email, link, expira_em: expiraEm }),
+          }).catch((e) => console.error('Falha ao entregar a redefinição de senha:', e.message));
+        }
+      }
+      return responder(res, 202, resposta);
+    }
+
+    if (metodo === 'POST' && pathname === '/auth/redefinir') {
+      const { token, senha } = await lerJson(req, 2_000);
+      if (typeof senha !== 'string' || senha.length < 10 || senha.length > 200) throw new HttpError(400, 'senha_fraca', 'A senha deve ter de 10 a 200 caracteres');
+      const userId = typeof token === 'string' && token.length >= 20 && token.length <= 100 ? db.gastarRedefinicao(sha256(token)) : null;
+      if (!userId) throw new HttpError(400, 'link_invalido', 'Este link expirou ou já foi usado. Peça um novo em "Esqueci minha senha".');
+      db.redefinirSenha(userId, await hashSenha(senha));
+      return responder(res, 200, { mensagem: 'Senha alterada. Entre com a nova senha.' });
+    }
+
+    // Recuperação assistida: o operador gera o link e passa ao cliente por um canal confiável.
+    if (metodo === 'POST' && pathname === '/admin/usuarios/redefinicao') {
+      const enviado = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+      if (!config.adminToken || !compararSegredos(enviado, config.adminToken)) throw new HttpError(403, 'proibido', 'Token de administração inválido');
+      const { email } = await lerJson(req, 2_000);
+      const user = typeof email === 'string' ? db.usuarioPorEmail(email.trim().toLowerCase()) : null;
+      if (!user) throw new HttpError(404, 'nao_encontrado', 'Usuário não encontrado');
+      return responder(res, 200, linkDeRedefinicao(user.id));
     }
 
     // --- administração (operador do SaaS) ---

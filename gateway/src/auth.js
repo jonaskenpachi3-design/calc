@@ -29,7 +29,7 @@ function assinar(payloadB64, segredo) {
 
 export function emitirToken(claims, segredo, ttlSegundos) {
   const exp = Math.floor(Date.now() / 1000) + ttlSegundos;
-  const payload = b64(JSON.stringify({ ...claims, exp }));
+  const payload = b64(JSON.stringify({ ...claims, iat: Date.now(), exp }));
   return `${payload}.${assinar(payload, segredo)}`;
 }
 
@@ -64,4 +64,5 @@ export function compararSegredos(a, b) {
   return ba.length === bb.length && crypto.timingSafeEqual(ba, bb);
 }
 
+export const tokenAleatorio = () => crypto.randomBytes(32).toString('base64url');
 export const novoId = () => crypto.randomUUID();

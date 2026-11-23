@@ -95,7 +95,9 @@ function renderApp() {
   const appRoot = document.getElementById('app-root');
   if (!appRoot) return;
 
-  if (!state.token) {
+  // Link de redefinição de senha: abre a tela mesmo com sessão ativa.
+  if (/^#\/redefinir\?token=/.test(window.location.hash)) components.login = null;
+  if (!state.token || components.login?.modo === 'redefinir') {
     // Não logado → Tela de Login/Planos
     if (!components.login) {
       components.login = new LoginScreen(state, api, router);

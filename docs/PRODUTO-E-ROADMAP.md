@@ -47,4 +47,5 @@ Estas são ideias de mercado, não funcionalidades:
 2. ~~Fixar versões dos repositórios oficiais e limitar memória dos contêineres.~~ Feito; falta medir a memória com carga real.
 3. ~~Busca de produto por nome e correção de erros na própria tela (auditoria).~~ Feito; falta validar contra as calculadoras reais.
 4. ~~Lote com XML, comparativo (modelo atual e CBS/IBS; Simples e regime regular) e relatório PDF com a marca do escritório.~~ Feito nos limites descritos acima; falta validar com notas reais e com as calculadoras reais.
-5. Cobrança, recuperação de senha, PostgreSQL e monitoramento (pré-requisitos para vender com SLA).
+5. ~~Recuperação de senha.~~ Feita (link de uso único por webhook ou gerado pelo operador; sem SMTP embutido).
+6. Cobrança, confirmação de e-mail, PostgreSQL e monitoramento (pré-requisitos para vender com SLA).

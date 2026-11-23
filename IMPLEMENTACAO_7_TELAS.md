@@ -1,6 +1,6 @@
 # Documento de Implementação — 7 Telas Nexo Fiscal
 
-**Versão:** 1.0  
+**Versão:** 2.0  
 **Data:** 2026-11-22  
 **Autor:** Claude Code  
 **Projeto:** rtc-saas  
@@ -15,66 +15,66 @@ Este documento descreve a implementação das 7 telas definidas nos wireframes t
 
 | Componente | Tecnologia | Status |
 |------------|------------|--------|
-| Frontend | SPA vanilla JS (`gateway/public/index.html`) | ✅ Funcional (6 abas) |
+| Frontend | SPA vanilla JS (`gateway/public/index.html`) | ✅ Funcional (7 abas) |
 | Gateway API | Node.js/Express (`gateway/src/`) | ✅ Funcional |
 | Cálculo Regime Regular | Java/Spring Boot (`vendor/calculadora-rtc-regime-regular`) | ✅ Funcional |
 | Cálculo Simples Nacional | Java/Spring Boot (`vendor/calculadora-rtc-simples-nacional`) | ✅ Funcional |
 | Geração DANFSe | Go (`vendor/calculadora-rtc-gerador-danfse`) | ✅ Funcional |
 | Deploy | Docker Compose (5 serviços) | ✅ Funcional |
 
-### 1.2 Gap Analysis — Telas Faltantes
+### 1.2 Status das 7 Telas — Atualizado
 
-| Tela | Wireframe | Implementação Atual | Esforço Estimado |
-|------|-----------|---------------------|------------------|
-| **1. Seletor Multi-CNPJ** | ✅ Definido | ❌ Não existe | Alto |
-| **2. Dashboard Executivo** | ✅ Definido | 🟡 Parcial (`aba-inicio`) | Médio |
-| **3. Simulador em Lote Avançado** | ✅ Definido | 🟡 Parcial (`aba-lote`) | Alto |
-| **4. Auditoria de Itens** | ✅ Definido | ❌ Não existe | Alto |
-| **5. Relatório White-Label** | ✅ Definido | ❌ Não existe | Alto |
-| **6. Central DANFSe** | ✅ Definido | 🟡 Parcial (`aba-nota`) | Médio |
-| **7. Configurações/Assinatura** | ✅ Definido | 🟡 Parcial (`aba-conta`) | Médio |
+| Tela | Wireframe | Implementação Atual | Status | Arquivo |
+|------|-----------|---------------------|--------|---------|
+| **1. Seletor Multi-CNPJ** | ✅ Definido | ✅ Completo | **Concluída** | `CompanySelector.js` |
+| **2. Dashboard Executivo** | ✅ Definido | ✅ Completo | **Concluída** | `Dashboard.js` |
+| **3. Simulador em Lote Avançado** | ✅ Definido | ✅ Completo | **Concluída** | `LoteSimulador.js` |
+| **4. Auditoria de Itens** | ✅ Definido | ✅ Completo | **Concluída** | `Auditoria.js` |
+| **5. Relatório White-Label** | ✅ Definido | ❌ Placeholder | **Pendente** | `Relatorio.js` |
+| **6. Central DANFSe** | ✅ Definido | ❌ Placeholder | **Pendente** | `DanfseCentral.js` |
+| **7. Configurações/Assinatura** | ✅ Definido | 🟡 Parcial (UI pronta, falta backend) | **Em Andamento** | `Configuracoes.js` |
 
 ---
 
 ## 2. Arquitetura da Solução
 
-### 2.1 Frontend — SPA Única (Manter)
+### 2.1 Frontend — SPA Única (Mantida)
 
 **Decisão:** Manter arquitetura vanilla JS em `index.html` (sem React/Vue) para:
 - Zero build step, deploy simples
 - Bundle atual ~75KB (HTML+CSS+JS) — aceitável
 - Equipe pequena, curva de aprendizado zero
 
-**Refatoração necessária:**
-- Separar CSS → `styles.css` (cacheável)
-- Separar JS → `app.js` + módulos ES6 (`components/`, `services/`, `utils/`)
-- Adicionar Chart.js via CDN para gráficos
-- Manter single-file para deploy, mas desenvolver em arquivos separados
+**Refatoração realizada:**
+- ✅ CSS separado → `styles.css` (cacheável)
+- ✅ JS separado → `app.js` + módulos ES6 (`components/`, `services/`, `utils/`)
+- ✅ Chart.js via CDN para gráficos
+- ✅ Single-file para deploy, mas desenvolvimento em arquivos separados
 
-### 2.2 Backend — Novos Endpoints Gateway
+### 2.2 Backend — Endpoints Gateway Implementados
 
 ```yaml
-# Novas rotas em gateway/src/app.js
-/empresas                    # CRUD empresas do contador
-/empresas/:cnpj/dashboard    # KPIs + dados gráfico
-/simulacoes/lote/xml         # Upload XML/ZIP → processamento assíncrono
-/simulacoes/lote/:id/status  # Polling de progresso
-/simulacoes/lote/:id/itens   # Itens com erro/alerta (paginado)
-/simulacoes/lote/:id/recalcular  # Recalcular itens corrigidos
-/relatorios/:id              # Dados relatório comparativo
-/relatorios/:id/pdf          # Gerar PDF white-label
-/relatorios/:id/excel        # Exportar Excel
-/danfse/lote                 # Gerar PDFs em lote (retorna ZIP)
-/danfse/historico            # Histórico DANFSe
-/assinatura/uso              # Uso CNPJs do plano
-/assinatura/dados-escritorio # Logo, responsável, CRC
+# Rotas existentes em gateway/src/app.js
+/empresas                    # CRUD empresas do contador ✅
+/empresas/:cnpj/dashboard    # KPIs + dados gráfico ✅
+/simulacoes/lote/xml         # Upload XML/ZIP → processamento assíncrono ✅ (endpoint existe)
+/simulacoes/lote/:id/status  # Polling de progresso ⚠️ (precisa implementar worker)
+/simulacoes/lote/:id/itens   # Itens com erro/alerta (paginado) ⚠️ (precisa implementar)
+/simulacoes/lote/:id/recalcular  # Recalcular itens corrigidos ⚠️ (precisa implementar)
+/relatorios/:id              # Dados relatório comparativo ❌
+/relatorios/:id/pdf          # Gerar PDF white-label ❌
+/relatorios/:id/excel        # Exportar Excel ❌
+/danfse/lote                 # Gerar PDFs em lote (retorna ZIP) ❌
+/danfse/historico            # Histórico DANFSe ❌
+/assinatura/uso              # Uso CNPJs do plano ⚠️ (parcial via /usage)
+/assinatura/dados-escritorio # Logo, responsável, CRC ❌
 ```
 
-### 2.3 Processamento Assíncrono (Lote)
+### 2.3 Processamento Assíncrono (Lote) — Pendente
 
 **Problema:** Processar 500+ notas XML sincronamente travaria o gateway (timeout 30s).
 
-**Solução:** Worker separado + polling.
+**Solução Planejada:** Worker separado + polling (Bull + Redis).
 
 ```mermaid
 graph LR
@@ -89,36 +89,33 @@ graph LR
 ```
 
 **Opções de Queue:**
-| Opção | Prós | Contras |
-|-------|------|---------|
-| **Bull + Redis** (Recomendado) | Robusto, retry, dashboard, escala | +1 serviço Docker |
-| **Array em memória** | Zero dependência | Não escala, perde jobs se restart |
-| **pg-boss (PostgreSQL)** | Usa DB existente | Mais complexo |
+| Opção | Prós | Contras | Status |
+|-------|------|---------|--------|
+| **Bull + Redis** (Recomendado) | Robusto, retry, dashboard, escala | +1 serviço Docker | **Pendente** |
+| Array em memória | Zero dependência | Não escala, perde jobs se restart | Não recomendado |
+| pg-boss (PostgreSQL) | Usa DB existente | Mais complexo | Alternativa |
 
 **Recomendação:** **Bull + Redis** — adicionar ao `docker-compose.yml`.
 
 ---
 
-## 3. Detalhamento por Tela
+## 3. Detalhamento por Tela — Status Atual
 
-### 3.1 Tela 1 — Seletor de Empresas (Multi-CNPJ)
+### 3.1 Tela 1 — Seletor de Empresas (Multi-CNPJ) ✅ CONCLUÍDA
 
 #### Fluxo
 ```
 Login → Seletor Empresas → Dashboard (empresa ativa)
 ```
 
-#### Componentes
-```javascript
-// Novo estado global
-let empresaAtiva = null;  // { cnpj, razaoSocial, regime, ultimaSimulacao }
-let empresas = [];        // Lista do contador
-
-// Componentes
-CompanySelectorModal     // Busca + botão [+ Cadastrar]
-CompanyCard              // Card: nome, CNPJ, regime, última simulação, [Acessar]
-QuickRegisterModal       // 3 campos: CNPJ (auto-preenchimento), Regime, [Salvar]
-```
+#### Implementação (`CompanySelector.js`)
+- ✅ Lista de empresas do contador com cards (nome, CNPJ, regime, última simulação)
+- ✅ Busca em tempo real (debounced) por Razão Social ou CNPJ
+- ✅ Botão [+ Cadastrar Nova Empresa] com modal
+- ✅ Auto-preenchimento via APIs públicas (BrasilAPI, ReceitaWS, CNPJ.ws)
+- ✅ Sugestão de regime baseada no CNAE
+- ✅ Exclusão de empresas com confirmação
+- ✅ Seleção de empresa ativa → redireciona para Dashboard
 
 #### API Pública CNPJ (Auto-preenchimento)
 ```
@@ -127,15 +124,15 @@ GET https://receitaws.com.br/v1/cnpj/{cnpj}  // Ou CNPJ.ws, BrasilAPI
 ```
 
 #### Integração Auth
-- JWT atual → adicionar claim `empresaId` (CNPJ ativo)
-- Middleware `requireEmpresa` nas rotas que precisam de empresa selecionada
-- Header `X-Empresa-Ativa` ou claim no token
+- ✅ JWT atual → adicionado claim `empresaId` (CNPJ ativo) via `sessionStorage`
+- ✅ Header `X-Empresa-Ativa` enviado nas requisições
+- ✅ Middleware `requireEmpresa` nas rotas que precisam de empresa selecionada
 
 ---
 
-### 3.2 Tela 2 — Dashboard Executivo
+### 3.2 Tela 2 — Dashboard Executivo ✅ CONCLUÍDA
 
-#### Layout
+#### Layout Implementado
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ [Empresa ▼]                                    [Nova Simulação] │
@@ -149,8 +146,25 @@ GET https://receitaws.com.br/v1/cnpj/{cnpj}  // Ou CNPJ.ws, BrasilAPI
 │ └─────────┘ └─────────┘ └─────────┘                         │
 ├─────────────────────────────────────────────────────────────┤
 │ ⚠ 14 itens com divergência na regra da Reforma [Revisar]   │
+│ ┌─────────────────┐  ┌─────────────────┐                   │
+│ │ Uso do Plano    │  │ Empresa Selecionada                │
+│ │ Simulações: 12/∞│  │ Razão Social, CNPJ, Regime, CNAE   │
+│ │ PDFs DANFSe: 3/50│  │ [Trocar de Empresa]                │
+│ └─────────────────┘  └─────────────────┘                   │
+│ ┌─────────────────────────────────────────────────────────┐ │
+│ │ Ações Rápidas                                           │ │
+│ │ [＋ Nova Simulação] [⇧ Simulador em Lote] [▧ DANFSe]  │ │
+│ └─────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+#### Implementação (`Dashboard.js`)
+- ✅ 4 KPIs cards: Faturamento Analisado, Carga Atual, Projeção Reforma, Diferença
+- ✅ Gráfico Chart.js barras comparativo (Atual vs Simples Novo vs Regular Novo)
+- ✅ Alertas de divergência com contagem de itens afetados
+- ✅ Barra de uso do plano (Simulações e PDFs DANFSe)
+- ✅ Cards de empresa selecionada e ações rápidas
+- ✅ Endpoint `/empresas/:cnpj/dashboard` no backend
 
 #### KPIs (Calculados no Backend)
 ```javascript
@@ -159,40 +173,30 @@ GET https://receitaws.com.br/v1/cnpj/{cnpj}  // Ou CNPJ.ws, BrasilAPI
   faturamentoAnalisado: { valor: 450000, qtdNotas: 120 },
   cargaAtual: { valor: 27000, percentual: 6.0 },
   projecaoReforma: { valor: 31500, percentual: 7.0 },
-  diferenca: { valor: 4500, tipo: 'aumento' }, // ou 'reducao'
+  diferenca: { valor: 4500, tipo: 'aumento' },
   alertas: [
     { tipo: 'divergencia_ncm', qtd: 14, mensagem: '...' }
   ],
   grafico: {
     labels: ['Jan','Fev','Mar',...],
     datasets: [
-      { label: 'Atual', data: [...] },
-      { label: 'Simples Novo', data: [...] },
-      { label: 'Regular Novo', data: [...] }
+      { label: 'Atual', data: [...], backgroundColor: '#5f7084' },
+      { label: 'Simples Novo', data: [...], backgroundColor: '#0d9488' },
+      { label: 'Regular Novo', data: [...], backgroundColor: '#3976bd' }
     ]
+  },
+  uso: {
+    calculo: { usado: 12, limite: null },
+    danfse: { usado: 3, limite: 50 }
   }
 }
 ```
 
-#### Gráfico — Chart.js Config
-```javascript
-new Chart(ctx, {
-  type: 'bar',
-  data: dashboard.grafico,
-  options: {
-    responsive: true,
-    interaction: { mode: 'index', intersect: false },
-    plugins: { legend: { position: 'top' } },
-    scales: { y: { beginAtZero: true, ticks: { callback: v => 'R$ ' + v.toLocaleString() } } }
-  }
-});
-```
-
 ---
 
-### 3.3 Tela 3 — Simulador em Lote Avançado
+### 3.3 Tela 3 — Simulador em Lote Avançado ✅ CONCLUÍDA (Frontend)
 
-#### Layout
+#### Layout Implementado
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ Simulador em Lote                              [Baixar Modelo] │
@@ -205,113 +209,105 @@ new Chart(ctx, {
 ├─────────────────────────────────────────────────────────────┤
 │ Cenários de Simulação:                                      │
 │ ☑ Simular no Regime Atual da empresa (Simples Nacional)     │
-☑ Simular também no Regime Alternativo (Lucro Presumido)      │
+| ☐ Simular também no Regime Alternativo (Lucro Presumido)    │
 ├─────────────────────────────────────────────────────────────┤
 │ ████████████████████░░░░  68%  Processando nota 340/500...  │
-│ Validando regras na calculadora oficial da Receita...       │
+│ Validando regras na calculadora oficial...                  │
 ├─────────────────────────────────────────────────────────────┤
 │ [Cancelar]                                    [Ver Resultados] │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-#### DropZone — Multi-formato
-```javascript
-// Aceita:
-// - application/xml, text/xml (.xml)
-// - application/zip (.zip com múltiplos XMLs)
-// - text/csv (.csv modelo)
+#### Implementação (`LoteSimulador.js`)
+- ✅ DropZone multi-formato (drag & drop + click)
+  - Aceita: `.xml` (NF-e/NFS-e), `.zip` (múltiplos XMLs), `.csv` (modelo)
+  - Validação: máx 500 notas, 50MB por arquivo
+  - Lista de arquivos selecionados com remoção individual
+- ✅ Botão [⬇ Baixar Modelo CSV] com cabeçalho e exemplo
+- ✅ Seleção de cenários:
+  - Regime Atual (obrigatório)
+  - Regime Alternativo (opcional - Lucro Presumido + Simples)
+- ✅ Progress bar real com polling (2s interval)
+  - Etapas: validando → extraindo → parseando → calculando → consolidando
+  - Contadores: total, processados, erros, tempo estimado
+- ✅ Redirecionamento automático baseado em resultado:
+  - Tem erros → `/auditoria?jobId=...`
+  - Sem erros → `/relatorio?jobId=...`
+- ✅ Botão [Cancelar] durante processamento
 
-const parseFile = async (file) => {
-  if (file.name.endsWith('.zip')) return await parseZip(file);
-  if (file.name.endsWith('.csv')) return await parseCsv(file);
-  return await parseXml(file);
-};
-```
-
-#### Progresso Real (Polling)
+#### API Necessária (Backend - Pendente)
 ```javascript
-// POST /simulacoes/lote/xml → { jobId: "uuid" }
-// GET /simulacoes/lote/:jobId/status → 
-{
-  status: 'processing', // 'queued' | 'processing' | 'completed' | 'failed'
-  progress: { total: 500, processados: 340, erros: 12 },
-  etapa: 'validando_regras_cbs_ibs',
-  tempoEstimado: 45 // segundos
-}
-```
+// POST /simulacoes/lote/xml (multipart/form-data: files[] + cnpj + regime_atual + cenarios)
+// → { jobId: "uuid" }
 
-#### Redirecionamento Automático
-```javascript
-if (resultado.temErros) {
-  router.navigate('/auditoria', { jobId });
-} else {
-  router.navigate('/relatorio', { jobId });
-}
+// GET /simulacoes/lote/:jobId/status
+// → { status: 'processing', progress: { total: 500, processados: 340, erros: 12 }, etapa: 'calculando_regime_atual', tempoEstimado: 45 }
+
+// GET /simulacoes/lote/:jobId/itens?status=erro&page=1&size=50
+// → { itens: [...], total: 14, page: 1, totalPages: 1 }
+
+// POST /simulacoes/lote/:jobId/recalcular
+// → { itens: [{ indice: 0, codigo: '...', classificacao: '...', valor: '...' }] }
 ```
 
 ---
 
-### 3.4 Tela 4 — Auditoria e Saneamento de Itens
+### 3.4 Tela 4 — Auditoria e Saneamento de Itens ✅ CONCLUÍDA (Frontend)
 
-#### Layout
+#### Layout Implementado
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Auditoria — Lote #abc-123          [Recalcular Todos Corrigidos] │
+│ Auditoria — Lote #abc-123          [Recalcular Selecionados (3)] │
 ├─────────────────────────────────────────────────────────────┤
-│ Filtros: [Todos (120)] [Com Erro (14)] [Validados (106)]   │
+│ Filtros: [Todos (120)] [Com Erro (14)] [Com Alerta (5)] [Calculados (101)] │
+│ Buscar: [________________________]                          │
 ├─────────────────────────────────────────────────────────────┤
 │ ┌───┬──────────┬─────────────┬────────┬──────────────────┬───────┐ │
-│ │ Nº│ Nota     │ Prod/Serv   │ NCM    │ Motivo do Alerta │ Ação  │ │
+│ │☑  │ Nº Nota  │ Prod/Serv   │ NCM    │ Classificação    │ Ação  │ │
 │ ├───┼──────────┼─────────────┼────────┼──────────────────┼───────┤ │
-│ │ 1 │ NF 1042  │ Consultoria │ 0000...│ Classificação    │ [Editar│ │
-│ │   │          │ TI          │        │ incompatível     │ Recalc]│ │
+│ │☑  │ NF 1042  │ Consultoria │ 0000...│ [200028 ▼]       │ [Recalcular] [Usar sugestão: 200015] │ │
+│ │   │ 15/01/25 │ TI          │        │ ⚠ Incompatível   │       │ │
 │ ├───┼──────────┼─────────────┼────────┼──────────────────┼───────┤ │
-│ │ 2 │ NF 1043  │ Carne bovina│ 0201...│ NCM inexistente  │ [Editar│ │
-│ │   │          │             │        │ na tabela 2027   │ Recalc]│ │
+│ │☐  │ NF 1043  │ Carne bovina│ 0201...│ [200015 ▼]       │ [Recalcular]            │ │
+│ │   │ 15/01/25 │             │        │ ✓ Calculado      │       │ │
 │ └───┴──────────┴─────────────┴────────┴──────────────────┴───────┘ │
+│ ◄ 1 2 3 ... 5 ►        (50 por página, server-side)         │
+├─────────────────────────────────────────────────────────────┤
+│ Resumo: [Total: 120] [Erro: 14] [Alerta: 5] [Calculado: 101] │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-#### DataTable — Funcionalidades
-- **Filtros** por status (tabs)
-- **Ordenação** por coluna
-- **Paginação** (server-side, 50 por página)
-- **Edição Inline** (modal ou row-expansion):
-  - Campo NCM/Código (com busca tipo-ahead)
-  - Campo Classificação (select com validação `aplicavel`)
-  - Campo Valor
-  - Botão [Recalcular Item]
-- **Ação em Massa**: Checkbox header → [Recalcular Selecionados]
+#### Implementação (`Auditoria.js`)
+- ✅ DataTable com colunas: Checkbox, Nº Nota, Produto/Serviço, NCM/NBS, Classificação (select), Valor, Regime, Status, Motivo, Ação
+- ✅ Filtros por status (abas): Todos / Com Erro / Com Alerta / Calculados
+- ✅ Busca textual (debounced) por nota, produto, NCM, classificação
+- ✅ Ordenação por coluna (clicável, ASC/DESC)
+- ✅ Paginação server-side (50 por página)
+- ✅ Edição inline:
+  - NCM/NBS: input com type-ahead (busca catálogo NCM/NBS)
+  - Classificação: select com validação `aplicavel`
+  - Valor: input numérico
+- ✅ Ações por linha: [Recalcular Item] + [Usar sugestão] (quando há sugestão da calculadora)
+- ✅ Seleção em massa: checkbox header → seleciona todos da página
+- ✅ [Recalcular Selecionados (N)] - processa em lote
+- ✅ Contadores de filtro atualizados dinamicamente
+- ✅ Cards de resumo: Total, Erro, Alerta, Calculado
 
-#### API
+#### API Necessária (Backend - Pendente)
 ```javascript
-// GET /simulacoes/lote/:id/itens?status=erro&page=1&size=50
-{
-  itens: [
-    { 
-      notaNumero: '1042', 
-      descricao: 'Consultoria TI', 
-      codigo: '000000000', 
-      classificacao: '200028',
-      motivoAlerta: 'Classificação tributária incompatível com CBS',
-      sugestaoClassificacao: '200015', // da API aplicavel
-      status: 'erro'
-    }
-  ],
-  total: 14,
-  page: 1,
-  totalPages: 1
-}
+// GET /simulacoes/lote/:jobId/itens?status=erro&page=1&size=50&busca=termo&sort=notaNumero&order=asc
+// → { itens: [{ id, notaNumero, notaData, itemIndice, descricao, codigo, classificacao, valor, regime, status, mensagens[], motivoAlerta, sugestaoClassificacao }], total, page, totalPages }
 
-// POST /simulacoes/lote/:id/recalcular
-{ itens: [{ indice: 0, codigo: '122011200', classificacao: '200015', valor: '1200' }] }
+// POST /simulacoes/lote/:jobId/recalcular
+// Body: { itens: [{ indice, codigo, classificacao, valor }] }
+// → { recalculados: [...] }
 ```
 
 ---
 
-### 3.5 Tela 5 — Relatório Comparativo & Exportação White-Label
+### 3.5 Tela 5 — Relatório Comparativo & Exportação White-Label ❌ PENDENTE
 
-#### Layout
+#### Layout (Wireframe)
 ```
 ┌─────────────────────────────────────────────────────────────┬──────────────────┐
 │                         RELATÓRIO                           │  PERSONALIZAÇÃO  │
@@ -336,72 +332,32 @@ if (resultado.temErros) {
 └─────────────────────────────────────────────────────────────┴──────────────────┘
 ```
 
-#### Geração PDF White-Label
-**Opção A: Puppeteer (Recomendada)**
-- Renderiza HTML + CSS → PDF pixel-perfect
-- Suporta logo, quebras de página, rodapé com CRC
-- Adiciona ~150MB na imagem Docker
+#### Status Atual (`Relatorio.js`)
+- ❌ Placeholder apenas — mostra descrição das funcionalidades planejadas
 
-**Opção B: jsPDF (Client-side)**
-- Zero backend, mas limitado (tabelas complexas, fontes)
-- Não recomendado para relatório oficial
+#### Tecnologia Recomendada
+- **PDF:** Puppeteer no gateway (Chromium Alpine ~150MB) → HTML → PDF pixel-perfect
+- **Excel:** ExcelJS (server-side)
+- **Frontend:** Duas abas + painel lateral responsivo
 
-**Implementação Puppeteer:**
+#### API Necessária (Backend)
 ```javascript
-// gateway/src/pdf.js
-const puppeteer = require('puppeteer');
+// GET /relatorios/:jobId
+// → { resumo: {...}, memoriaCalculo: [...], empresa: {...}, comparativo: {...} }
 
-async function gerarRelatorioPDF(dados, personalizacao) {
-  const browser = await puppeteer.launch({ args: ['--no-sandbox'] });
-  const page = await browser.newPage();
-  
-  const html = renderRelatorioHTML(dados, personalizacao); // template
-  await page.setContent(html, { waitUntil: 'networkidle0' });
-  
-  const pdf = await page.pdf({
-    format: 'A4',
-    printBackground: true,
-    margin: { top: '20mm', bottom: '25mm', left: '15mm', right: '15mm' },
-    displayHeaderFooter: true,
-    headerTemplate: `<div style="width:100%;text-align:center;font-size:8px">${personalizacao.escritorioNome}</div>`,
-    footerTemplate: `<div style="width:100%;text-align:center;font-size:8px">Página <span class="pageNumber"></span> de <span class="totalPages"></span> | ${personalizacao.responsavelTecnico} - CRC ${personalizacao.crc}</div>`
-  });
-  
-  await browser.close();
-  return pdf;
-}
-```
+// POST /relatorios/:jobId/pdf
+// Body: { logoBase64, escritorioNome, responsavelTecnico, crc, emailContato, parecerContador }
+// → PDF blob
 
-#### Exportação Excel
-```javascript
-// gateway/src/excel.js
-const ExcelJS = require('exceljs');
-
-async function gerarExcelRelatorio(dados) {
-  const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet('Memória de Cálculo');
-  
-  ws.columns = [
-    { header: 'Nº Nota', key: 'nota', width: 12 },
-    { header: 'Item', key: 'item', width: 30 },
-    { header: 'Base', key: 'base', width: 15, style: { numFmt: '#,##0.00' } },
-    { header: 'CBS', key: 'cbs', width: 15, style: { numFmt: '#,##0.00' } },
-    { header: 'IBS', key: 'ibs', width: 15, style: { numFmt: '#,##0.00' } },
-    { header: 'IS', key: 'is', width: 15, style: { numFmt: '#,##0.00' } },
-    { header: 'Total', key: 'total', width: 15, style: { numFmt: '#,##0.00' } },
-    { header: 'Base Legal', key: 'lei', width: 20 }
-  ];
-  
-  dados.itens.forEach(i => ws.addRow(i));
-  return await wb.xlsx.writeBuffer();
-}
+// POST /relatorios/:jobId/excel
+// → Excel blob
 ```
 
 ---
 
-### 3.6 Tela 6 — Central de DANFSe (Motor Go)
+### 3.6 Tela 6 — Central de DANFSe (Motor Go) ❌ PENDENTE
 
-#### Layout
+#### Layout (Wireframe)
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ Central de DANFSe                                             │
@@ -430,24 +386,32 @@ async function gerarExcelRelatorio(dados) {
 └─────────────────────────────────────────────────────────────┘
 ```
 
-#### API DANFSe Lote (Novo)
+#### Status Atual (`DanfseCentral.js`)
+- ❌ Placeholder apenas — mostra descrição + botão de teste do endpoint existente
+- ✅ Endpoint atual `POST /v1/danfse` já funciona (proxy para serviço Go)
+
+#### API Necessária (Backend)
 ```javascript
 // POST /danfse/lote  (multipart/form-data: files[] + canhoto + situacao)
 // → Processa via serviço Go existente, retorna ZIP
-// GET /danfse/historico?limite=50
-// POST /danfse/:id/email  { destinatario, assunto, mensagem }
-```
 
-#### Integração Serviço Go
-- Já existe `calculadora-rtc-gerador-danfse` na porta 8080
-- Estender para aceitar múltiplos XMLs → retorna ZIP
-- Manter compatibilidade com endpoint atual `/v1/danfse`
+// POST /danfse/avulso
+// Body: { prestador, tomador, servico, canhoto, situacao }
+// → PDF blob
+
+// GET /danfse/historico?limite=50
+// → { historico: [{ id, tipo, prestador, tomador, data, status, arquivo }] }
+
+// POST /danfse/:id/email
+// Body: { destinatario, assunto, mensagem }
+// → Envia e-mail com anexo
+```
 
 ---
 
-### 3.7 Tela 7 — Configurações & Assinatura
+### 3.7 Tela 7 — Configurações & Assinatura 🟡 PARCIAL
 
-#### Layout
+#### Layout Atual (Implementado em `Configuracoes.js`)
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ Configurações & Assinatura                                    │
@@ -473,88 +437,96 @@ async function gerarExcelRelatorio(dados) {
 └─────────────────────────────────────────────────────────────┘
 ```
 
-#### API
+#### Status
+- ✅ UI completa: barra de uso do plano, upload logo (preview), campos do escritório, gestão de chaves API
+- ⚠️ Falta integração backend:
+  - `GET /assinatura/uso` → buscar uso real do plano
+  - `PUT /assinatura/dados-escritorio` → persistir dados white-label
+  - `GET/POST/DELETE /keys` → já existe no backend, precisa conectar frontend
+  - Upload logo → converter para base64 e salvar
+
+#### API Necessária (Backend)
 ```javascript
-// GET /assinatura/uso → { plano: 'escritorio', cnpjsUsados: 12, cnpjsLimite: 15 }
-// PUT /assinatura/dados-escritorio → { logo: base64, nome, responsavel, crc, email }
-// GET/POST/DELETE /keys (já existe, manter)
+// GET /assinatura/uso
+// → { plano: 'escritorio', cnpjsUsados: 12, cnpjsLimite: 15, calculoUsado: 45, calculoLimite: null, danfseUsado: 3, danfseLimite: 50 }
+
+// PUT /assinatura/dados-escritorio
+// Body: { logoBase64, nome, responsavelTecnico, crc, emailContato }
+// → { ok: true }
+
+// GET /keys (já existe)
+// POST /keys (já existe)
+// DELETE /keys/:id (já existe)
 ```
 
 ---
 
-## 4. Modelo de Dados — Novas Entidades
+## 4. Modelo de Dados — Novas Entidades (Status)
 
-### 4.1 Empresa (Contador → Clientes)
+### 4.1 Empresa (Contador → Clientes) ✅ Implementado
 ```sql
 -- Tabela: empresas (SQLite em saas-data)
 CREATE TABLE empresas (
-  cnpj TEXT PRIMARY KEY,           -- 14 dígitos, só números
+  cnpj TEXT PRIMARY KEY,
   razao_social TEXT NOT NULL,
   nome_fantasia TEXT,
-  regime_atual TEXT NOT NULL,      -- 'simples-nacional' | 'lucro-presumido' | 'lucro-real'
-  cnae_principal TEXT,             -- 7 dígitos
-  endereco_json TEXT,              -- JSON com endereço completo
-  contador_id TEXT NOT NULL,       -- FK para usuário (contador)
+  regime_atual TEXT NOT NULL,
+  cnae_principal TEXT,
+  endereco_json TEXT,
+  contador_id TEXT NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   ultima_simulacao_at DATETIME
 );
-
-CREATE INDEX idx_empresas_contador ON empresas(contador_id);
 ```
 
-### 4.2 Lote de Simulação
+### 4.2 Lote de Simulação ⚠️ Parcial (tabela existe, faltam campos)
 ```sql
 CREATE TABLE simulacoes_lote (
-  id TEXT PRIMARY KEY,             -- UUID
-  empresa_cnpj TEXT NOT NULL,      -- FK empresas
+  id TEXT PRIMARY KEY,
+  empresa_cnpj TEXT NOT NULL,
   contador_id TEXT NOT NULL,
   arquivo_original_nome TEXT,
-  arquivo_original_tipo TEXT,      -- 'xml' | 'zip' | 'csv'
-  cenarios TEXT NOT NULL,          -- JSON: ['regime-atual', 'regime-alternativo']
-  status TEXT DEFAULT 'queued',    -- 'queued' | 'processing' | 'completed' | 'failed' | 'cancelled'
+  arquivo_original_tipo TEXT,
+  cenarios TEXT NOT NULL,
+  status TEXT DEFAULT 'queued',
   total_notas INTEGER DEFAULT 0,
   processadas INTEGER DEFAULT 0,
   com_erro INTEGER DEFAULT 0,
-  resultado_json TEXT,             -- JSON com totais por cenário
+  resultado_json TEXT,
   erro_mensagem TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   started_at DATETIME,
   completed_at DATETIME
 );
-
-CREATE INDEX idx_lote_contador ON simulacoes_lote(contador_id, created_at DESC);
 ```
 
-### 4.3 Itens de Lote (para Auditoria)
+### 4.3 Itens de Lote (para Auditoria) ❌ Não implementado
 ```sql
 CREATE TABLE lote_itens (
   id TEXT PRIMARY KEY,
-  lote_id TEXT NOT NULL,           -- FK simulacoes_lote
+  lote_id TEXT NOT NULL,
   nota_numero TEXT,
   nota_data TEXT,
-  item_indice INTEGER,             -- índice dentro da nota
+  item_indice INTEGER,
   descricao TEXT,
-  codigo TEXT,                     -- NCM ou NBS
-  classificacao TEXT,              -- cClassTrib
+  codigo TEXT,
+  classificacao TEXT,
   valor REAL,
-  regime TEXT,                     -- cenário simulado
-  status TEXT,                     -- 'calculado' | 'erro' | 'alerta'
-  mensagens TEXT,                  -- JSON array
+  regime TEXT,
+  status TEXT,
+  mensagens TEXT,
   cbs REAL, ibs REAL, is REAL, total REAL,
-  base_legal TEXT,                 -- lei retornada pela calculadora
+  base_legal TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
-
-CREATE INDEX idx_lote_itens_lote ON lote_itens(lote_id);
-CREATE INDEX idx_lote_itens_status ON lote_itens(lote_id, status);
 ```
 
-### 4.4 Dados do Escritório (White-Label)
+### 4.4 Dados do Escritório (White-Label) ❌ Não implementado
 ```sql
 CREATE TABLE escritorio_config (
-  contador_id TEXT PRIMARY KEY,    -- FK usuário
-  logo_base64 TEXT,                -- PNG/JPG, max 500KB
+  contador_id TEXT PRIMARY KEY,
+  logo_base64 TEXT,
   nome TEXT NOT NULL,
   responsavel_tecnico TEXT,
   crc TEXT,
@@ -565,13 +537,11 @@ CREATE TABLE escritorio_config (
 
 ---
 
-## 5. Mudanças no Docker Compose
+## 5. Mudanças no Docker Compose — Pendentes
 
 ```yaml
-# docker-compose.yml — Adições
+# docker-compose.yml — Adições necessárias
 services:
-  # ... serviços existentes ...
-  
   redis:
     image: redis:7-alpine
     mem_limit: ${MEM_REDIS:-128m}
@@ -595,14 +565,11 @@ services:
     depends_on: [redis, regime-regular, simples-nacional, danfse]
     restart: unless-stopped
 
-  # Gateway precisa de Puppeteer para PDF
   gateway:
-    # ... existente ...
     # Adicionar no Dockerfile: RUN apk add --no-cache chromium nss freetype harfbuzz
     # ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 volumes:
-  # ... existentes ...
   redis-data:
 ```
 
@@ -624,9 +591,9 @@ ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 
 ---
 
-## 6. Segurança e Autorização
+## 6. Segurança e Autorização — Implementado Parcialmente
 
-### 6.1 Multi-Tenancy (Contador ↔ Empresas)
+### 6.1 Multi-Tenancy (Contador ↔ Empresas) ✅
 ```javascript
 // Middleware gateway/src/auth.js
 function requireEmpresa(req, res, next) {
@@ -634,91 +601,65 @@ function requireEmpresa(req, res, next) {
   if (!empresaId) {
     return res.status(400).json({ erro: { mensagem: 'Nenhuma empresa selecionada' } });
   }
-  // Verificar se contador tem acesso à empresa
   if (!req.user.empresas.includes(empresaId)) {
     return res.status(403).json({ erro: { mensagem: 'Acesso negado a esta empresa' } });
   }
   req.empresaId = empresaId;
   next();
 }
-
-// Aplicar em rotas que precisam de empresa
-app.get('/empresas/:cnpj/dashboard', requireAuth, requireEmpresa, dashboardController);
-app.post('/simulacoes/lote/xml', requireAuth, requireEmpresa, loteController.upload);
 ```
 
-### 6.2 Rate Limiting (Lote)
+### 6.2 Rate Limiting (Lote) ⚠️ Parcial (existe rate limit geral, falta específico para lote)
 ```javascript
-// gateway/src/rateLimit.js
-const rateLimit = require('express-rate-limit');
-
 const loteLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hora
-  max: 10, // 10 lotes por hora por contador
+  windowMs: 60 * 60 * 1000,
+  max: 10,
   message: { erro: { mensagem: 'Limite de processamento em lote excedido. Tente novamente em 1 hora.' } },
   keyGenerator: (req) => req.user.id
 });
-
-app.post('/simulacoes/lote/xml', requireAuth, requireEmpresa, loteLimiter, loteController.upload);
 ```
 
 ---
 
-## 7. Cronograma Detalhado
+## 7. Cronograma Atualizado
 
-### Semana 1 — Fundação + Tela 1
-| Dia | Entrega |
-|-----|---------|
-| 1 | Refatorar `index.html` → `styles.css` + `app.js` + módulos ES6; adicionar Chart.js |
-| 2 | Criar `CompanySelector` + `QuickRegisterModal` + estado `empresaAtiva` |
-| 3 | Endpoints `/empresas` (CRUD) + migração SQLite + auto-preenchimento CNPJ |
-| 4 | Integrar Seletor no fluxo de login → Dashboard |
-| 5 | Testes + ajustes responsivos + dark mode básico |
+### ✅ Fase 1 — Concluída (Fundação + Telas 1-2)
+- [x] Refatorar `index.html` → `styles.css` + `app.js` + módulos ES6; adicionar Chart.js
+- [x] Criar `CompanySelector` + `QuickRegisterModal` + estado `empresaAtiva`
+- [x] Endpoints `/empresas` (CRUD) + migração SQLite + auto-preenchimento CNPJ
+- [x] Integrar Seletor no fluxo de login → Dashboard
+- [x] Dashboard com KPIs, Chart.js, alertas, uso do plano
+- [x] Testes + ajustes responsivos + dark mode
 
-### Semana 2 — Dashboard (Tela 2) + Lote Básico (Tela 3)
-| Dia | Entrega |
-|-----|---------|
-| 6 | Endpoint `/empresas/:cnpj/dashboard` + KPIs reais |
-| 7 | `aba-dashboard` com 4 KPIs + Chart.js gráfico comparativo |
-| 8 | Alertas de divergência + navegação para Auditoria |
-| 9 | DropZone multi-formato (XML/ZIP/CSV) + parsing |
-| 10 | Worker Bull + Redis + endpoints lote + polling progresso |
+### ✅ Fase 2 — Concluída (Frontend Telas 3-4)
+- [x] DropZone multi-formato (XML/ZIP/CSV) + parsing
+- [x] Cenários comparativos (regime atual + alternativo)
+- [x] Progress bar com polling (frontend pronto, backend worker pendente)
+- [x] Redirecionamento automático baseado em erros
+- [x] `Auditoria` DataTable com filtros, paginação, ordenação
+- [x] Edição inline + recálculo item + recálculo em massa
 
-### Semana 3 — Lote Avançado + Auditoria (Telas 3, 4)
-| Dia | Entrega |
-|-----|---------|
-| 11 | Cenários comparativos (regime atual + alternativo) |
-| 12 | Redirecionamento automático baseado em erros |
-| 13 | `aba-auditoria` DataTable com filtros, paginação, ordenação |
-| 14 | Edição inline + recálculo item + recálculo em massa |
-| 15 | Testes integração lote → auditoria → relatório |
+### 🔄 Fase 3 — Em Andamento (Backend Worker + Telas 5-6)
+- [ ] Worker Bull + Redis + endpoints lote completos
+- [ ] Tabelas `simulacoes_lote` e `lote_itens` no SQLite
+- [ ] `Relatorio` - Duas abas + painel lateral + Puppeteer PDF + ExcelJS
+- [ ] `DanfseCentral` - Lote (ZIP→ZIP) + Avulso + Histórico + E-mail
 
-### Semana 4 — Relatório White-Label + DANFSe (Telas 5, 6)
-| Dia | Entrega |
-|-----|---------|
-| 16 | `aba-relatorio` estrutura abas + painel lateral |
-| 17 | Puppeteer no gateway + template HTML→PDF white-label |
-| 18 | Exportação Excel (ExcelJS) |
-| 19 | `aba-danfse` lote (ZIP→ZIP) + avulso + histórico |
-| 20 | Envio e-mail DANFSe (nodemailer ou serviço externo) |
-
-### Semana 5 — Configurações + Polimento (Tela 7 + Qualidade)
-| Dia | Entrega |
-|-----|---------|
-| 21 | `aba-configuracoes` uso CNPJs + dados escritório + logo upload |
-| 22 | Dark mode completo (`prefers-color-scheme`) |
-| 23 | Acessibilidade: ARIA tabs, focus-visible, contraste WCAG AA |
-| 24 | Testes E2E (Playwright) — fluxos críticos |
-| 25 | Bug fixes, performance, documentação, deploy staging |
+### 📅 Fase 4 — Planejada (Configurações + Polimento)
+- [ ] `Configuracoes` - Conectar backend: uso CNPJs + dados escritório + logo
+- [ ] Dark mode completo (`prefers-color-scheme`)
+- [ ] Acessibilidade: ARIA tabs, focus-visible, contraste WCAG AA
+- [ ] Testes E2E (Playwright) — fluxos críticos
+- [ ] Bug fixes, performance, documentação, deploy staging
 
 ---
 
-## 8. Riscos e Mitigações
+## 8. Riscos e Mitigações (Atualizado)
 
 | Risco | Probabilidade | Impacto | Mitigação |
 |-------|---------------|---------|-----------|
 | Puppeteer + Chromium aumenta imagem Docker >1GB | Alta | Médio | Usar `chromium` Alpine (150MB) + `--no-sandbox`; considerar PDF client-side se crítico |
-| Processamento lote 500 notas > 30s (timeout gateway) | Alta | Alto | **Worker assíncrono + polling** (já planejado) |
+| Processamento lote 500 notas > 30s (timeout gateway) | Alta | Alto | **Worker assíncrono + polling** (frontend pronto, backend pendente) |
 | API pública CNPJ (ReceitaWS) instável/rate-limited | Média | Médio | Cache local (24h) + fallback BrasilAPI/CNPJ.ws; permitir preenchimento manual |
 | Chart.js bundle size (~60KB gz) | Baixa | Baixo | Carregar lazy (dynamic import) só na aba Dashboard |
 | Migração dados existentes (simulações antigas) | Média | Médio | Script de migração: associar simulações históricas à primeira empresa do contador |
@@ -739,18 +680,33 @@ Para cada tela:
 - [ ] Código revisado (ESLint + Prettier)
 - [ ] Documentado no README (como usar)
 
+**Status por tela:**
+| Tela | Funcionalidade | Responsivo | Dark Mode | Acessibilidade | Tratamento Erros | Loading States | Testes E2E | Code Review | Documentado |
+|------|----------------|------------|-----------|----------------|------------------|----------------|------------|-------------|-------------|
+| 1. Seletor | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ |
+| 2. Dashboard | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ |
+| 3. Lote | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ |
+| 4. Auditoria | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ |
+| 5. Relatório | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| 6. DANFSe | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| 7. Config | 🟡 | ✅ | ✅ | 🟡 | 🟡 | 🟡 | ❌ | ✅ | ❌ |
+
 ---
 
 ## 10. Próximos Passos Imediatos
 
-1. **Aprovação deste documento** — Confirmar escopo, priorização, decisões técnicas
-2. **Setup ambiente** — Adicionar Redis + Worker no `docker-compose.yml` local
-3. **Iniciar Fase 1** — Refatorar frontend + Seletor Multi-CNPJ
-4. **Reunião semanal** — Sync de progresso, ajustes de rota
+1. **Implementar Worker Bull + Redis** — Processamento assíncrono de lotes (backend)
+2. **Criar tabelas `simulacoes_lote` e `lote_itens`** — SQLite migrations
+3. **Implementar endpoints de lote completos** — `/simulacoes/lote/:id/status`, `/itens`, `/recalcular`
+4. **Implementar `Relatorio`** — Duas abas + Puppeteer PDF + ExcelJS
+5. **Implementar `DanfseCentral`** — Lote + Avulso + Histórico + E-mail
+6. **Conectar `Configuracoes` ao backend** — Uso plano, dados escritório, logo
+7. **Testes E2E com Playwright** — Fluxos críticos end-to-end
+8. **Documentação no README** — Como usar cada tela
 
 ---
 
-## Apêndice A — Estrutura de Arquivos Proposta (Pós-Refatoração)
+## Apêndice A — Estrutura de Arquivos Atual (Pós-Refatoração)
 
 ```
 gateway/
@@ -758,36 +714,39 @@ gateway/
 │   ├── index.html          # Entry point (carrega CSS/JS)
 │   ├── styles.css          # Todo CSS extraído
 │   ├── app.js              # Bootstrap + router + estado global
+│   ├── state.js            # Estado global (State class)
+│   ├── router.js           # Router hash-based
+│   ├── api.js              # API client
+│   ├── utils.js            # Utilitários compartilhados
 │   └── components/
-│       ├── CompanySelector.js
-│       ├── Dashboard.js
-│       ├── LoteSimulador.js
-│       ├── Auditoria.js
-│       ├── Relatorio.js
-│       ├── DanfseCentral.js
-│       ├── Configuracoes.js
-│       ├── DataTable.js
-│       ├── DropZone.js
-│       ├── ProgressBar.js
-│       ├── Modal.js
-│       └── KPICard.js
+│       ├── CompanySelector.js   # ✅ Completo
+│       ├── Dashboard.js         # ✅ Completo
+│       ├── Simulador.js         # ✅ Completo (item-a-item)
+│       ├── LoteSimulador.js     # ✅ Completo (frontend)
+│       ├── Auditoria.js         # ✅ Completo (frontend)
+│       ├── Relatorio.js         # ❌ Placeholder
+│       ├── DanfseCentral.js     # ❌ Placeholder
+│       ├── Configuracoes.js     # 🟡 Parcial
+│       └── LoginScreen.js       # ✅ Completo
 ├── src/
 │   ├── index.js            # Express setup
 │   ├── auth.js             # JWT + requireEmpresa
-│   ├── empresas.js         # CRUD empresas
-│   ├── dashboard.js        # KPIs + gráfico
-│   ├── lote.js             # Upload + status + itens + recalcular
-│   ├── relatorio.js        # Dados + PDF + Excel
-│   ├── danfse.js           # Lote + histórico + email
-│   ├── configuracoes.js    # Uso plano + escritório
-│   ├── worker-lote.js      # Processador Bull
-│   ├── pdf.js              # Puppeteer templates
-│   ├── excel.js            # ExcelJS export
+│   ├── empresas.js         # CRUD empresas (em app.js)
+│   ├── dashboard.js        # KPIs + gráfico (em app.js)
+│   ├── lote.js             # ❌ Worker + endpoints pendentes
+│   ├── relatorio.js        # ❌ Pendente
+│   ├── danfse.js           # ❌ Pendente
+│   ├── configuracoes.js    # ❌ Endpoints pendentes
+│   ├── worker-lote.js      # ❌ Pendente
+│   ├── pdf.js              # ❌ Pendente (Puppeteer)
+│   ├── excel.js            # ❌ Pendente (ExcelJS)
 │   ├── db.js               # SQLite helpers
 │   ├── upstream.js         # Proxy para serviços Java/Go
-│   └── rateLimit.js
+│   ├── plans.js            # Planos e limites
+│   ├── simulacao.js        # Montagem/ tradução simulações
+│   └── rateLimit.js        # ❌ Pendente
 ├── test/
-│   ├── e2e/                # Playwright tests
+│   ├── e2e/                # ❌ Playwright tests pendentes
 │   └── unit/
 ├── Dockerfile
 └── package.json
@@ -795,7 +754,7 @@ gateway/
 
 ---
 
-## Apêndice B — Dependências Novas (package.json)
+## Apêndice B — Dependências Novas (package.json) — A Instalar
 
 ```json
 {
@@ -818,4 +777,28 @@ gateway/
 
 ---
 
-**Fim do Documento**
+## Apêndice C — Endpoints Backend: Status Resumido
+
+| Endpoint | Método | Status | Observação |
+|----------|--------|--------|------------|
+| `/empresas` | GET/POST | ✅ | CRUD completo |
+| `/empresas/delete` | POST | ✅ | Exclusão |
+| `/empresas/:cnpj/dashboard` | GET | ✅ | KPIs + gráfico |
+| `/simulacoes/lote/xml` | POST | 🟡 | Recebe upload, precisa enfileirar no worker |
+| `/simulacoes/lote/:id/status` | GET | ❌ | Precisa worker + Redis |
+| `/simulacoes/lote/:id/itens` | GET | ❌ | Precisa tabela `lote_itens` |
+| `/simulacoes/lote/:id/recalcular` | POST | ❌ | Precisa worker |
+| `/relatorios/:id` | GET | ❌ | Pendente |
+| `/relatorios/:id/pdf` | POST | ❌ | Pendente (Puppeteer) |
+| `/relatorios/:id/excel` | POST | ❌ | Pendente (ExcelJS) |
+| `/danfse/lote` | POST | ❌ | Pendente |
+| `/danfse/avulso` | POST | ❌ | Pendente |
+| `/danfse/historico` | GET | ❌ | Pendente |
+| `/danfse/:id/email` | POST | ❌ | Pendente |
+| `/assinatura/uso` | GET | ❌ | Parcial via `/usage` |
+| `/assinatura/dados-escritorio` | PUT | ❌ | Pendente |
+| `/keys` | GET/POST/DELETE | ✅ | Já implementado |
+
+---
+
+**Fim do Documento v2.0**

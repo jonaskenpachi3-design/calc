@@ -4,7 +4,7 @@
  * código, classificação e valor na própria tela e recalcular — uma a uma ou todas as corrigidas.
  */
 import { el, limpar, aviso, campo, dinheiro, downloadBlob, toast } from '../utils.js';
-import { lote, temLote, depsDoLote } from '../lote-store.js';
+import { lote, temLote, depsDoLote, persistirLote } from '../lote-store.js';
 import { temProblema, totais, recalcular, planilhaCorrigida, resultadoCsv, anexoDoItem, atividadesDe, dataBR, TIPO_TP } from '../lote-engine.js';
 import { campoBusca, conferirItem } from '../catalogo.js';
 
@@ -24,8 +24,9 @@ export class Auditoria {
 
   desenhar() {
     const a = document.getElementById('aud'); if (!a) return; limpar(a);
+    persistirLote(this.state.user?.id); // guarda as correções feitas até aqui
     if (!temLote()) {
-      a.append(el('div', { class: 'card' }, el('h2', {}, 'Nenhum lote para auditar'), el('p', { class: 'mut' }, 'Processe um lote primeiro. Os resultados ficam aqui, só neste navegador, até você fechar a página.'),
+      a.append(el('div', { class: 'card' }, el('h2', {}, 'Nenhum lote para auditar'), el('p', { class: 'mut' }, 'Processe um lote primeiro. Os resultados ficam guardados neste computador por até 7 dias, até você clicar em Sair.'),
         el('button', { id: 'ir-lote' }, 'Ir para o simulador em lote')));
       document.getElementById('ir-lote').onclick = () => this.router.navigate('lote'); return;
     }

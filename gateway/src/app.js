@@ -103,7 +103,7 @@ export function criarApp(config, db) {
     // Sessões emitidas antes da última troca de senha deixam de valer.
     const dono = db.usuarioPorId(claims.uid);
     if (!dono || (claims.iat || 0) < dono.senha_alterada_em) throw new HttpError(401, 'token_invalido', 'Sessão inválida ou expirada');
-    return { tenantId: claims.tid, userId: claims.uid, via: 'sessao' };
+    return { tenantId: claims.tid, userId: claims.uid, via: 'sessao', confirmado: !!dono.email_confirmado_em };
   }
 
   function limitarTaxa(tenantId) {
@@ -216,6 +216,25 @@ export function criarApp(config, db) {
     // --- contas ---
     if (metodo === 'GET' && pathname === '/planos') return responder(res, 200, { planos: PLANOS });
 
+    // --- entrega de links por e-mail (webhook) e confirmação de e-mail ---
+    const entregar = (corpo) => {
+      if (!config.resetWebhookUrl) return;
+      fetch(config.resetWebhookUrl, {
+        method: 'POST', signal: AbortSignal.timeout(5000),
+        headers: { 'content-type': 'application/json', ...(config.resetWebhookToken ? { authorization: `Bearer ${config.resetWebhookToken}` } : {}) },
+        body: JSON.stringify(corpo),
+      }).catch((e) => console.error(`Falha ao entregar ${corpo.tipo}:`, e.message));
+    };
+    const linkDeConfirmacao = (userId) => {
+      const token = tokenAleatorio();
+      const expira = db.criarConfirmacao(userId, sha256(token), config.confirmTtlSeconds);
+      return { link: `${config.publicUrl}/#/confirmar-email?token=${token}`, expira_em: new Date(expira).toISOString() };
+    };
+    const enviarConfirmacao = (user) => {
+      const { link, expira_em: expiraEm } = linkDeConfirmacao(user.id);
+      entregar({ tipo: 'confirmacao_de_email', email: user.email, link, expira_em: expiraEm });
+    };
+
     if (metodo === 'POST' && pathname === '/auth/register') {
       const { nome, email, senha } = await lerJson(req, 10_000);
       if (typeof nome !== 'string' || !nome.trim() || nome.length > 120) throw new HttpError(400, 'nome_invalido', 'Nome obrigatório');
@@ -228,8 +247,9 @@ export function criarApp(config, db) {
       const { tenantId, userId } = db.criarTenantComUsuario({
         nome: nome.trim(), email: emailNorm, senhaHash: await hashSenha(senha),
       });
+      enviarConfirmacao({ id: userId, email: emailNorm });
       const token = emitirToken({ tid: tenantId, uid: userId }, config.authSecret, config.sessionTtlSeconds);
-      return responder(res, 201, { token, plano: 'gratuito' });
+      return responder(res, 201, { token, plano: 'gratuito', email_confirmacao_obrigatoria: config.exigirConfirmacaoEmail });
     }
 
     if (metodo === 'POST' && pathname === '/auth/login') {
@@ -240,6 +260,13 @@ export function criarApp(config, db) {
       if (!user || !ok) throw new HttpError(401, 'credenciais_invalidas', 'E-mail ou senha incorretos');
       const token = emitirToken({ tid: user.tenant_id, uid: user.id }, config.authSecret, config.sessionTtlSeconds);
       return responder(res, 200, { token });
+    }
+
+    if (metodo === 'POST' && pathname === '/auth/confirmar') {
+      const { token } = await lerJson(req, 2_000);
+      const userId = typeof token === 'string' && token.length >= 20 && token.length <= 100 ? db.gastarConfirmacao(sha256(token)) : null;
+      if (!userId) throw new HttpError(400, 'link_invalido', 'Este link expirou ou já foi usado. Entre e peça um novo.');
+      return responder(res, 200, { mensagem: 'E-mail confirmado.' });
     }
 
     // --- recuperação de senha ---
@@ -257,13 +284,7 @@ export function criarApp(config, db) {
       // No máximo 3 pedidos por hora por conta; a resposta é a mesma existindo ou não o e-mail.
       if (user && db.redefinicoesRecentes(user.id, Date.now() - 3600_000) < 3) {
         const { link, expira_em: expiraEm } = linkDeRedefinicao(user.id);
-        if (config.resetWebhookUrl) {
-          fetch(config.resetWebhookUrl, {
-            method: 'POST', signal: AbortSignal.timeout(5000),
-            headers: { 'content-type': 'application/json', ...(config.resetWebhookToken ? { authorization: `Bearer ${config.resetWebhookToken}` } : {}) },
-            body: JSON.stringify({ tipo: 'redefinicao_de_senha', email: user.email, link, expira_em: expiraEm }),
-          }).catch((e) => console.error('Falha ao entregar a redefinição de senha:', e.message));
-        }
+        entregar({ tipo: 'redefinicao_de_senha', email: user.email, link, expira_em: expiraEm });
       }
       return responder(res, 202, resposta);
     }
@@ -275,6 +296,17 @@ export function criarApp(config, db) {
       if (!userId) throw new HttpError(400, 'link_invalido', 'Este link expirou ou já foi usado. Peça um novo em "Esqueci minha senha".');
       db.redefinirSenha(userId, await hashSenha(senha));
       return responder(res, 200, { mensagem: 'Senha alterada. Entre com a nova senha.' });
+    }
+
+    // Confirmação assistida: o operador confirma direto (confirmar:true) ou gera o link para repassar.
+    if (metodo === 'POST' && pathname === '/admin/usuarios/confirmacao') {
+      const enviado = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+      if (!config.adminToken || !compararSegredos(enviado, config.adminToken)) throw new HttpError(403, 'proibido', 'Token de administração inválido');
+      const { email, confirmar } = await lerJson(req, 2_000);
+      const user = typeof email === 'string' ? db.usuarioPorEmail(email.trim().toLowerCase()) : null;
+      if (!user) throw new HttpError(404, 'nao_encontrado', 'Usuário não encontrado');
+      if (confirmar === true) { db.confirmarEmail(user.id); return responder(res, 200, { confirmado: true }); }
+      return responder(res, 200, linkDeConfirmacao(user.id));
     }
 
     // Recuperação assistida: o operador gera o link e passa ao cliente por um canal confiável.
@@ -306,10 +338,23 @@ export function criarApp(config, db) {
     }
     const ctx = autenticar(req);
     limitarTaxa(ctx.tenantId);
+    const naoConfirmado = ctx.via === 'sessao' && !ctx.confirmado;
+    if (config.exigirConfirmacaoEmail && naoConfirmado && !/^\/me(\/reenviar-confirmacao)?$/.test(pathname)) {
+      throw new HttpError(403, 'email_nao_confirmado', 'Confirme seu e-mail para continuar. Procure o link que enviamos ou peça um novo.');
+    }
+
+    if (metodo === 'POST' && pathname === '/me/reenviar-confirmacao') {
+      if (ctx.via !== 'sessao') throw new HttpError(403, 'apenas_sessao', 'Use uma sessão de usuário');
+      const user = db.usuarioPorId(ctx.userId);
+      if (user.email_confirmado_em) return responder(res, 200, { mensagem: 'Seu e-mail já está confirmado.', confirmado: true });
+      // No máximo 3 links por hora por conta.
+      if (db.confirmacoesRecentes(user.id, Date.now() - 3600_000) < 3) enviarConfirmacao(user);
+      return responder(res, 202, { mensagem: 'Se ainda houver links disponíveis, enviamos um novo para o seu e-mail.' });
+    }
 
     if (metodo === 'GET' && pathname === '/me') {
       const t = db.tenantPorId(ctx.tenantId);
-      return responder(res, 200, { id: t.id, nome: t.nome, plano: t.plano });
+      return responder(res, 200, { id: t.id, nome: t.nome, plano: t.plano, email_confirmado: ctx.via === 'sessao' ? ctx.confirmado : null, confirmacao_obrigatoria: config.exigirConfirmacaoEmail });
     }
 
     // --- Empresas (Multi-CNPJ) ---

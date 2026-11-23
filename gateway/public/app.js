@@ -17,7 +17,8 @@ if ('serviceWorker' in navigator) {
 import { State } from './state.js';
 import { Router } from './router.js';
 import { API } from './api.js';
-import { esc } from './utils.js';
+import { esc, el, toast } from './utils.js';
+import { restaurarLote, persistirLote, apagarTodosOsLotes } from './lote-store.js';
 import { CompanySelector } from './components/CompanySelector.js';
 import { Dashboard } from './components/Dashboard.js';
 import { Simulador } from './components/Simulador.js';
@@ -64,27 +65,50 @@ let components = {};
 // ==========================================================================
 
 document.addEventListener('DOMContentLoaded', async () => {
+  // Link de confirmação de e-mail (#/confirmar-email?token=...): o token sai da barra de endereço na hora.
+  let avisoInicial = null;
+  const mc = /^#\/confirmar-email\?token=([\w-]+)/.exec(window.location.hash);
+  if (mc) {
+    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    try { await api.post('/auth/confirmar', { token: mc[1] }); avisoInicial = ['E-mail confirmado. Obrigado!', 'ok']; }
+    catch (e) { avisoInicial = [e.message, 'err']; }
+  }
+
   // Verificar token salvo
   const savedToken = sessionStorage.getItem('rtc_token');
   if (savedToken) {
     state.setToken(savedToken);
   }
 
-  // Carregar empresas do contador (se logado)
+  // Carregar a conta e as empresas do contador (se logado)
   if (state.token) {
     try {
-      await state.loadEmpresas();
+      await state.loadUser();
+      if (!emailPendenteObrigatorio()) await state.loadEmpresas();
     } catch (e) {
-      console.warn('Falha ao carregar empresas:', e);
+      console.warn('Falha ao carregar a conta:', e);
       state.clearToken();
     }
   }
+
+  // Lote guardado neste computador: volta ao escolher a empresa; guarda de novo ao fechar a página.
+  state.on('empresa:change', async () => {
+    const emp = state.empresaAtiva;
+    const quando = emp && await restaurarLote(state.user?.id, emp.cnpj);
+    if (quando) {
+      if (document.getElementById('content')) renderActiveTab();
+      toast(`Lote anterior desta empresa recuperado (${new Date(quando).toLocaleString('pt-BR')}).`, 'ok', 6000);
+    }
+  });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') persistirLote(state.user?.id); });
+  window.addEventListener('pagehide', () => persistirLote(state.user?.id));
 
   // Iniciar roteador
   router.start();
 
   // Render inicial
   renderApp();
+  if (avisoInicial) toast(avisoInicial[0], avisoInicial[1], 6000);
 });
 
 // ==========================================================================
@@ -108,12 +132,20 @@ function renderApp() {
     return;
   }
 
+  // Operador exige e-mail confirmado: nada funciona até confirmar.
+  if (emailPendenteObrigatorio()) {
+    appRoot.innerHTML = '';
+    appRoot.appendChild(telaConfirmeEmail());
+    return;
+  }
+
   // Logado mas sem empresa selecionada → Seletor de Empresas
   if (!state.empresaAtiva) {
     if (!components.companySelector) {
       components.companySelector = new CompanySelector(state, api, router);
     }
     appRoot.innerHTML = '';
+    appRoot.appendChild(avisoEmail());
     appRoot.appendChild(components.companySelector.render());
     components.companySelector.mount();
     return;
@@ -123,17 +155,63 @@ function renderApp() {
   renderMainApp(appRoot);
 }
 
+// ==========================================================================
+// Confirmação de e-mail
+// ==========================================================================
+
+const emailPendente = () => state.user && state.user.email_confirmado === false;
+const emailPendenteObrigatorio = () => emailPendente() && state.user.confirmacao_obrigatoria === true;
+
+async function reenviarConfirmacao(botao) {
+  botao.disabled = true;
+  try { const r = await api.post('/me/reenviar-confirmacao', {}); toast(r.mensagem, 'ok', 5000); }
+  catch (e) { toast(e.message, 'err', 5000); }
+  botao.disabled = false;
+}
+
+/** Faixa discreta no topo enquanto o e-mail não foi confirmado (quando a confirmação não é obrigatória). */
+function avisoEmail() {
+  const caixa = el('div');
+  if (!emailPendente()) return caixa;
+  const botao = el('button', { class: 'sec', style: 'margin-left:12px' }, 'Reenviar link');
+  botao.addEventListener('click', () => reenviarConfirmacao(botao));
+  caixa.append(el('div', { class: 'msg warn', style: 'margin:12px 20px 0' }, 'Confirme seu e-mail: enviamos um link para o endereço do cadastro. ', botao));
+  return caixa;
+}
+
+function telaConfirmeEmail() {
+  const reenviar = el('button', { class: 'sec' }, 'Reenviar link');
+  reenviar.addEventListener('click', () => reenviarConfirmacao(reenviar));
+  const jaConfirmei = el('button', {}, 'Já confirmei');
+  jaConfirmei.addEventListener('click', async () => {
+    try { await state.loadUser(); } catch { /* sessão caiu: volta ao login */ }
+    if (emailPendenteObrigatorio()) { toast('Ainda não consta a confirmação. Abra o link do e-mail.', 'err', 5000); return; }
+    try { await state.loadEmpresas(); } catch { /* o seletor trata */ }
+    renderApp();
+  });
+  const sair = el('button', { class: 'sec' }, 'Sair');
+  sair.addEventListener('click', async () => { await apagarTodosOsLotes(); state.clearToken(); renderApp(); });
+  return el('div', { class: 'card', style: 'max-width:520px;margin:12vh auto;padding:28px' },
+    el('div', { class: 'eyebrow' }, 'Quase lá'),
+    el('h1', {}, 'Confirme seu e-mail'),
+    el('p', {}, 'Enviamos um link de confirmação para o e-mail do cadastro. Abra o link e depois clique em "Já confirmei". Se não encontrar a mensagem, olhe a caixa de spam ou peça um novo link.'),
+    el('div', { class: 'row', style: 'margin-top:16px;gap:10px' }, jaConfirmei, reenviar, sair));
+}
+
 function renderMainApp(root) {
   root.innerHTML = `
     <div class="app" id="main-app">
       <aside class="sidebar" id="sidebar"></aside>
       <div class="main">
         <header class="topbar" id="topbar"></header>
+        <div id="aviso-email"></div>
         <main class="content" id="content"></main>
         <div class="foot">As simulações usam as calculadoras publicadas pela Receita Federal e têm caráter informativo: não substituem a orientação do seu contador nem a apuração oficial dos tributos.</div>
       </div>
     </div>
   `;
+
+  document.getElementById('aviso-email')?.append(avisoEmail());
 
   // Renderizar Sidebar
   renderSidebar();
@@ -233,7 +311,8 @@ function renderTopbar() {
     </div>
   `;
 
-  document.getElementById('sair')?.addEventListener('click', () => {
+  document.getElementById('sair')?.addEventListener('click', async () => {
+    await apagarTodosOsLotes();
     state.clearToken();
     renderApp();
   });

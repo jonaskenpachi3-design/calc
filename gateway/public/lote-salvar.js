@@ -1,5 +1,5 @@
 /** Salva (ou substitui) os totais do lote atual na Visão geral. Só totais; nunca notas ou itens. */
-import { lote } from './lote-store.js';
+import { lote, persistirLote } from './lote-store.js';
 import { totais, comparativoAtual } from './lote-engine.js';
 
 function corpo(res, regime, atuais) {
@@ -17,6 +17,7 @@ export async function salvarLote(api, state) {
     lote.salvos = [];
     const r = await api.post(`/empresas/${empresa.cnpj}/analises`, corpo(lote.res, lote.regime, true)); lote.salvos.push(r.id);
     if (lote.resAlt.length) { const r2 = await api.post(`/empresas/${empresa.cnpj}/analises`, corpo(lote.resAlt, 'simples-nacional', false)); lote.salvos.push(r2.id); }
+    persistirLote(state.user?.id); // guarda também os ids das análises salvas
     return true;
   } catch { return false; }
 }

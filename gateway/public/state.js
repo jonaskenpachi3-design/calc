@@ -148,9 +148,8 @@ export class State {
   // ---- Eventos ----
 
   on(event, callback) {
-    const wrapper = (e) => {
-      if (e === event || event === '*') callback(e.detail);
-    };
+    // O ouvinte já é específico do evento (app:<evento>); comparar o objeto do evento com o nome nunca era verdadeiro.
+    const wrapper = (e) => callback(e.detail);
     window.addEventListener(`app:${event}`, wrapper);
     this.listeners.add({ event, wrapper });
     return () => this.off(event, callback);

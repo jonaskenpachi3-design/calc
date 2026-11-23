@@ -114,6 +114,13 @@ Variáveis no arquivo `.env` (nunca vai para o git):
 | `RESET_WEBHOOK_TOKEN` | Opcional. Enviado como `Authorization: Bearer`. |
 | `RESET_TTL_SECONDS` | Validade do link. Padrão 3600. |
 
+**Confirmação de e-mail.** Quem se cadastra recebe um link de confirmação (uso único, 24 h) pelo mesmo webhook, com `tipo: "confirmacao_de_email"` (o da senha vem como `"redefinicao_de_senha"`). Por padrão, a pessoa só vê um aviso com o botão "Reenviar link" e usa o sistema normalmente. Com `EXIGIR_CONFIRMACAO_EMAIL=true`, nada funciona até confirmar. Contas criadas antes desta função contam como confirmadas, e redefinir a senha pelo link do e-mail também confirma. Sem webhook, o operador confirma direto (`POST /admin/usuarios/confirmacao` com `{"email":"...","confirmar":true}`) ou gera o link (sem `confirmar`).
+
+| Variável | Para que serve |
+|---|---|
+| `EXIGIR_CONFIRMACAO_EMAIL` | `true` bloqueia o uso até confirmar o e-mail. Padrão `false`. |
+| `CONFIRM_TTL_SECONDS` | Validade do link de confirmação. Padrão 86400. |
+
 Sem webhook, o operador gera o link e o repassa ao cliente: `curl -X POST $URL/admin/usuarios/redefinicao -H "Authorization: Bearer $ADMIN_TOKEN" -H 'content-type: application/json' -d '{"email":"cliente@x.com"}'`. O sistema responde igual exista ou não o e-mail, aceita 3 pedidos por hora por conta, guarda só o hash do link, e a troca encerra as sessões antigas.
 
 Outras variáveis do gateway (valores padrão em `gateway/src/config.js`): `PORT`, `DB_PATH`, `SESSION_TTL_SECONDS`, `UPSTREAM_REGIME_REGULAR`, `UPSTREAM_SIMPLES_NACIONAL`, `UPSTREAM_DANFSE`, limites de tamanho, `MAX_OPERACOES_LOTE` (padrão 200 por chamada) e `RATE_LIMIT_PER_MINUTE`.
@@ -223,12 +230,12 @@ Leia antes de vender.
 - **Código do produto ou serviço:** o cliente pode buscar pelo nome, mas a busca é por palavras na descrição oficial (não há sinônimos nem nome comercial). O aviso de classificação incompatível depende da resposta da calculadora oficial e ainda não foi testado contra ela.
 - **Simples Nacional:** a alíquota efetiva é informada pelo usuário (extrato do PGDAS-D); o sistema não a calcula. ISS retido e benefícios municipais usam padrões.
 - **Imposto Seletivo e compra governamental** não estão no formulário.
-- **Sem cobrança, sem recuperação de senha, sem confirmação de e-mail.**
+- **Sem cobrança.** O e-mail (recuperação de senha e confirmação) depende do seu webhook; não há SMTP embutido.
 - **SQLite:** serve para uma instância. Para escalar, troque por PostgreSQL.
 - **XML no lote** só vale para o regime normal, e notas antigas sem o grupo de CBS e IBS vêm sem classificação tributária (completa-se na tela). Os layouts foram conferidos com os XMLs de exemplo da Receita, não com notas reais de clientes.
 - **Modelo atual (ICMS, ISS, PIS, COFINS):** nenhuma calculadora da Receita o calcula. O comparativo usa os valores informados na nota ou na planilha, é bruto (sem créditos) e, nas NFS-e, só conhece o ISS. Emitentes do Simples ficam fora (o DAS é único).
 - **Comparativo Simples × regular** soma só CBS e IBS: não inclui o restante do DAS nem os créditos do regime regular.
-- **Relatório em PDF** vem da impressão do navegador (sem servidor de PDF); a "planilha Excel" é um CSV. Não há gráficos além de barras simples. O resultado do lote fica só na memória do navegador: ao fechar a página, processe de novo.
+- **Relatório em PDF** vem da impressão do navegador (sem servidor de PDF); a "planilha Excel" é um CSV. Não há gráficos além de barras simples. O resultado detalhado do lote não vai para o servidor: fica guardado no navegador deste computador (por empresa, até 7 dias) e é apagado ao clicar em Sair, em Limpar/Novo lote, ou se o navegador bloquear o armazenamento local (aí fica só na memória e some ao fechar a página). Em computador compartilhado, use sempre Sair.
 - **Cenário Simples no lote** usa as mesmas alíquotas efetivas e atividade para todas as notas e não é atualizado quando você corrige uma nota na Auditoria (rode o lote de novo).
 - **Visão geral:** a carga atual só considera operações com tributos atuais informados; a porcentagem usa a base de todas as análises e pode ficar subestimada se parte delas não tiver esse dado.
 - **Avulso do DANFSe** (preencher dados sem XML) não existe: o gerador oficial só aceita o XML.

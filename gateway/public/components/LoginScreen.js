@@ -100,6 +100,9 @@ export class LoginScreen {
           if (this.modo === 'cadastro') corpo.nome = valor('a-nome');
           const r = await this.api.post(this.modo === 'cadastro' ? '/auth/register' : '/auth/login', corpo);
           this.state.setToken(r.token);
+          await this.state.loadUser();
+          // Sem isto, quem entra (em vez de se cadastrar) via a carteira vazia até recarregar a página.
+          if (!(this.state.user.email_confirmado === false && this.state.user.confirmacao_obrigatoria)) await this.state.loadEmpresas();
           aviso('a-msg');
           this.router.navigate('dashboard'); // Vai para seletor de empresas
         }

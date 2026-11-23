@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT NOT NULL UNIQUE,
   senha_hash TEXT NOT NULL,
   criado_em TEXT NOT NULL,
-  senha_alterada_em INTEGER NOT NULL DEFAULT 0
+  senha_alterada_em INTEGER NOT NULL DEFAULT 0,
+  email_confirmado_em INTEGER
 );
 CREATE TABLE IF NOT EXISTS api_keys (
   id TEXT PRIMARY KEY,
@@ -69,11 +70,24 @@ CREATE TABLE IF NOT EXISTS redefinicoes_senha (
   usado_em INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_redef_user ON redefinicoes_senha (user_id, criado_em);
+CREATE TABLE IF NOT EXISTS confirmacoes_email (
+  token_hash TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  criado_em INTEGER NOT NULL,
+  expira_em INTEGER NOT NULL,
+  usado_em INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_conf_user ON confirmacoes_email (user_id, criado_em);
 `;
 
 function migrarUsuarios(db) {
   const colunas = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
   if (colunas.length && !colunas.includes('senha_alterada_em')) db.exec('ALTER TABLE users ADD COLUMN senha_alterada_em INTEGER NOT NULL DEFAULT 0');
+  // Contas que já existiam antes da confirmação de e-mail ficam como confirmadas (ninguém é trancado para fora).
+  if (colunas.length && !colunas.includes('email_confirmado_em')) {
+    db.exec('ALTER TABLE users ADD COLUMN email_confirmado_em INTEGER');
+    db.prepare('UPDATE users SET email_confirmado_em = ?').run(Date.now());
+  }
 }
 
 const SCHEMA_ANALISES = `
@@ -155,6 +169,11 @@ function criarRepositorio(db) {
     redefPorHash: db.prepare('SELECT * FROM redefinicoes_senha WHERE token_hash = ?'),
     invalidarRedefs: db.prepare('UPDATE redefinicoes_senha SET usado_em = ? WHERE user_id = ? AND usado_em IS NULL'),
     trocarSenha: db.prepare('UPDATE users SET senha_hash = ?, senha_alterada_em = ? WHERE id = ?'),
+    inserirConf: db.prepare('INSERT INTO confirmacoes_email (token_hash, user_id, criado_em, expira_em) VALUES (?, ?, ?, ?)'),
+    contarConf: db.prepare('SELECT COUNT(*) AS n FROM confirmacoes_email WHERE user_id = ? AND criado_em >= ?'),
+    consumirConf: db.prepare('UPDATE confirmacoes_email SET usado_em = ? WHERE token_hash = ? AND usado_em IS NULL AND expira_em > ?'),
+    confPorHash: db.prepare('SELECT * FROM confirmacoes_email WHERE token_hash = ?'),
+    marcarConfirmado: db.prepare('UPDATE users SET email_confirmado_em = COALESCE(email_confirmado_em, ?) WHERE id = ?'),
     tenantPorId: db.prepare('SELECT * FROM tenants WHERE id = ?'),
     atualizarPlano: db.prepare('UPDATE tenants SET plano = ? WHERE id = ?'),
     inserirChave: db.prepare(
@@ -233,7 +252,19 @@ function criarRepositorio(db) {
     /** Gasta o token (uso único): devolve o id do usuário ou null se não existe, expirou ou já foi usado. */
     gastarRedefinicao: (tokenHash) => { const t = Date.now(); if (q.consumirRedef.run(t, tokenHash, t).changes !== 1) return null; return q.redefPorHash.get(tokenHash).user_id; },
     /** Troca a senha, derruba as sessões anteriores e invalida outros links pendentes. */
-    redefinirSenha: (userId, senhaHash) => { const t = Date.now(); q.trocarSenha.run(senhaHash, t, userId); q.invalidarRedefs.run(t, userId); },
+    // Quem recebeu e usou o link de senha no e-mail provou que ele é seu: conta como confirmado.
+    redefinirSenha: (userId, senhaHash) => { const t = Date.now(); q.trocarSenha.run(senhaHash, t, userId); q.invalidarRedefs.run(t, userId); q.marcarConfirmado.run(t, userId); },
+    criarConfirmacao: (userId, tokenHash, ttlSegundos) => { const t = Date.now(); q.inserirConf.run(tokenHash, userId, t, t + ttlSegundos * 1000); return t + ttlSegundos * 1000; },
+    confirmacoesRecentes: (userId, desdeMs) => q.contarConf.get(userId, desdeMs).n,
+    /** Gasta o link de confirmação (uso único) e marca o e-mail como confirmado. Devolve o id do usuário ou null. */
+    gastarConfirmacao: (tokenHash) => {
+      const t = Date.now();
+      if (q.consumirConf.run(t, tokenHash, t).changes !== 1) return null;
+      const userId = q.confPorHash.get(tokenHash).user_id;
+      q.marcarConfirmado.run(t, userId);
+      return userId;
+    },
+    confirmarEmail: (userId) => q.marcarConfirmado.run(Date.now(), userId),
     tenantPorId: (id) => q.tenantPorId.get(id),
     definirPlano: (tenantId, plano) => q.atualizarPlano.run(plano, tenantId).changes > 0,
 

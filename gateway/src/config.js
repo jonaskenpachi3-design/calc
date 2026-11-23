@@ -18,6 +18,9 @@ export function loadConfig(env = process.env) {
     resetWebhookUrl: env.RESET_WEBHOOK_URL || '',
     resetWebhookToken: env.RESET_WEBHOOK_TOKEN || '',
     resetTtlSeconds: int(env.RESET_TTL_SECONDS, 3600),
+    confirmTtlSeconds: int(env.CONFIRM_TTL_SECONDS, 86400),
+    // Se 'true', contas novas só usam o sistema depois de confirmar o e-mail. Padrão: só mostra um aviso.
+    exigirConfirmacaoEmail: env.EXIGIR_CONFIRMACAO_EMAIL === 'true',
     upstream: {
       regimeRegular: env.UPSTREAM_REGIME_REGULAR || 'http://regime-regular:8080',
       simplesNacional: env.UPSTREAM_SIMPLES_NACIONAL || 'http://simples-nacional:8082',

@@ -4,7 +4,7 @@
  * de cada operação seguem para a calculadora oficial, em partes, e nada é guardado no servidor além dos totais.
  */
 import { el, limpar, aviso, campo, dinheiro, downloadBlob } from '../utils.js';
-import { lote, reiniciarLote, depsDoLote, temLote } from '../lote-store.js';
+import { lote, reiniciarLote, depsDoLote, temLote, persistirLote, esquecerLote } from '../lote-store.js';
 import { lerArquivos, modeloCsv, processar, totais, gruposSimples, atividadesDe, comparativoRegimes, comparativoAtual, MAX_OPERACOES } from '../lote-engine.js';
 import { salvarLote } from '../lote-salvar.js';
 
@@ -54,7 +54,7 @@ export class LoteSimulador {
 
   async receber(arquivos) {
     if (!arquivos.length) return;
-    reiniciarLote(); limpar(document.getElementById('previa')); limpar(document.getElementById('concluido'));
+    esquecerLote(this.state.user?.id); limpar(document.getElementById('previa')); limpar(document.getElementById('concluido'));
     document.getElementById('cenarios').hidden = true; document.getElementById('processar').hidden = true;
     aviso('lote-msg', 'Lendo os arquivos…', 'warn');
     try {
@@ -117,7 +117,7 @@ export class LoteSimulador {
       el('div', { class: 'bar', id: 'proc-barra', hidden: true }, el('i', { id: 'proc-i', style: 'width:0%' })),
       el('p', { class: 'mut small' }, `Cada operação conta como 1 simulação na sua cota${lote.cenarioAlt ? ' (o cenário do Simples conta de novo)' : ''}.`),
       el('div', { class: 'row', style: 'justify-content:flex-end' }, el('button', { class: 'sec', id: 'limpar-lote' }, 'Limpar'), el('button', { id: 'processar-btn' }, `Simular ${n} operação(ões)`)));
-    document.getElementById('limpar-lote').onclick = () => { reiniciarLote(); this.router.navigate('lote'); };
+    document.getElementById('limpar-lote').onclick = async () => { await esquecerLote(this.state.user?.id); this.router.navigate('lote'); };
     document.getElementById('processar-btn').onclick = () => this.executar();
   }
 
@@ -142,7 +142,7 @@ export class LoteSimulador {
         lote.resAlt = await processar(alt.grupos, this.api, (f) => mostrar(f, 0, lote.grupos.length));
       }
       prog.style.width = '100%'; aviso('proc-msg');
-      lote.salvos = []; this.mostrarConcluido();
+      lote.salvos = []; this.mostrarConcluido(); persistirLote(this.state.user?.id);
     } catch (e) {
       aviso('proc-msg', e.message + (lote.res.length ? ` As ${lote.res.length} primeiras operações foram simuladas e contadas na sua cota.` : ''), 'err');
       btn.disabled = false; barra.hidden = true;
@@ -168,7 +168,7 @@ export class LoteSimulador {
         el('button', { class: 'sec', id: 'novo-lote' }, 'Novo lote'))));
     document.getElementById('ir-auditoria').onclick = () => this.router.navigate('auditoria');
     document.getElementById('ir-relatorio').onclick = () => this.router.navigate('relatorio');
-    document.getElementById('novo-lote').onclick = () => { reiniciarLote(); this.router.navigate('lote'); };
+    document.getElementById('novo-lote').onclick = async () => { await esquecerLote(this.state.user?.id); this.router.navigate('lote'); };
     document.getElementById('salvar-visao').onclick = async (e) => {
       e.target.disabled = true;
       const ok = await salvarLote(this.api, this.state);

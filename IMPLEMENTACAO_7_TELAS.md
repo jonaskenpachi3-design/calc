@@ -15,14 +15,14 @@
 - **Gateway Node puro, sem dependências npm** (Node 22.13+): `node:http`, `node:sqlite`, scrypt, HMAC. Menos superfície de ataque e nada a instalar.
 - **Front-end em módulos ES**, sem etapa de build, rota por hash (`#/aba`).
 - **Nada de dado inventado.** Cada tela mostra o que veio do servidor ou do arquivo enviado. Sem análise salva, a tela fica vazia e diz isso.
-- **Privacidade:** o servidor guarda só **totais** de cada análise. O resultado detalhado do lote fica **apenas na memória do navegador**. XML e PDF do DANFSe nunca são guardados.
+- **Privacidade:** o servidor guarda só **totais** de cada análise. O resultado detalhado do lote **não vai ao servidor**: fica guardado só no navegador do usuário (IndexedDB). XML e PDF do DANFSe nunca são guardados.
 - **Todo texto vindo do servidor ou de arquivo** entra na tela por `textContent` ou `esc()`, nunca como HTML cru.
 
 ### 1.2 Status das 7 telas
 
 | # | Tela | Status | Arquivos |
 |---|------|--------|----------|
-| 1 | Acesso (login, cadastro, recuperação de senha) | ✅ Feita. Falta confirmação de e-mail | `LoginScreen.js` |
+| 1 | Acesso (login, cadastro, recuperação de senha, confirmação de e-mail) | ✅ Feita | `LoginScreen.js` |
 | 2 | Carteira de CNPJs | ✅ Feita | `CompanySelector.js` |
 | 3 | Visão geral | ✅ Feita (números reais) | `Dashboard.js` |
 | 4 | Simulador em lote | ✅ Feita, com limites (ver 3.4) | `LoteSimulador.js`, `lote-engine.js`, `lote-store.js`, `lote-salvar.js`, `zip.js` |
@@ -70,10 +70,10 @@ A v1.0 previa worker + Redis. **Não foi feito.** O lote funciona assim:
 
 1. O **navegador** lê CSV, XML (NF-e, NFC-e, NFS-e) e ZIP, com limites de tamanho.
 2. Divide em blocos de **50 operações** e envia cada bloco a `POST /v1/simulacoes/lote` (o servidor aceita até `MAX_OPERACOES_LOTE`, padrão 200).
-3. O resultado é montado no navegador e guardado em `lote-store.js` (**memória**).
+3. O resultado é montado no navegador e mantido em `lote-store.js` (memória), com uma **cópia no IndexedDB** deste computador, por escritório e empresa (`persistirLote` / `restaurarLote`).
 4. Só os **totais** vão ao banco, quando a pessoa salva a análise.
 
-Consequência: fechar ou recarregar a página perde o resultado detalhado e as correções feitas na Auditoria.
+Consequência: fechar a aba **não** perde mais o lote nem as correções da Auditoria; ao entrar de novo e escolher a empresa, ele volta (aviso na tela). A cópia vale 7 dias e é apagada em **Sair**, em **Limpar/Novo lote** e ao iniciar outro lote. Se o navegador bloquear o armazenamento (modo privado, cota), o lote segue só na memória. Em computador compartilhado, é preciso usar Sair.
 
 ---
 
@@ -83,7 +83,7 @@ Consequência: fechar ou recarregar a página perde o resultado detalhado e as c
 - Entrar e criar conta (senha de 10 a 200 caracteres).
 - **Recuperação de senha:** "Esqueci minha senha" → link de uso único, válido por 1 hora, guardado só como hash. Entrega por webhook (`RESET_WEBHOOK_URL`) ou gerado pelo operador (`POST /admin/usuarios/redefinicao`). Resposta idêntica exista ou não o e-mail; 3 pedidos por hora por conta; a troca encerra as sessões antigas.
 - **Não há envio de e-mail embutido** (sem SMTP).
-- ❌ Confirmação de e-mail: não existe.
+- **Confirmação de e-mail:** o cadastro dispara um link de uso único (24 h) pelo mesmo webhook (`tipo: confirmacao_de_email`). Padrão: aviso com "Reenviar link" (3 por hora). Com `EXIGIR_CONFIRMACAO_EMAIL=true`, o sistema fica bloqueado até confirmar (erro 403 `email_nao_confirmado`, tela "Confirme seu e-mail"). Contas antigas contam como confirmadas; redefinir a senha pelo link também confirma. O operador pode confirmar direto ou gerar o link (`POST /admin/usuarios/confirmacao`).
 
 ### 3.2 Carteira de CNPJs
 - Cadastrar, escolher, trocar e excluir empresas; isoladas por escritório (chave composta `tenant_id + cnpj`).
@@ -102,7 +102,7 @@ Consequência: fechar ou recarregar a página perde o resultado detalhado e as c
 - Dois comparativos: **atual × CBS+IBS** (bruto, sem créditos) e **Simples × regime normal** (só CBS/IBS). Cenário do Simples usa alíquota efetiva e atividade informadas pela pessoa.
 - Os totais **excluem operações com problema**.
 - Salva a análise (`POST /empresas/:cnpj/analises`; reenviar um lote corrigido substitui o anterior).
-- ⚠️ Resultado detalhado só na memória do navegador.
+- ✅ Resultado guardado no navegador (ver 2.4); só os totais vão ao servidor.
 
 ### 3.5 Auditoria
 - Lista operações com erro devolvido pela calculadora; permite corrigir NCM, NBS e classificação na tela, com busca nos catálogos.
@@ -130,6 +130,8 @@ Consequência: fechar ou recarregar a página perde o resultado detalhado e as c
 | `/planos` | GET | Planos e limites |
 | `/auth/register` · `/auth/login` | POST | Conta e sessão |
 | `/auth/esqueci` · `/auth/redefinir` | POST | Recuperação de senha |
+| `/auth/confirmar` | POST | Confirma o e-mail pelo link |
+| `/me/reenviar-confirmacao` | POST | Novo link de confirmação (sessão) |
 | `/me` | GET | Conta atual |
 | `/me/escritorio` | GET/PUT | Dados e logo do escritório |
 | `/usage` · `/history` | GET | Uso do mês (inclui empresas) e histórico |
@@ -146,6 +148,7 @@ Consequência: fechar ou recarregar a página perde o resultado detalhado e as c
 | `/v1/dados/<tabela>` ou `/v1/tabelas/<tabela>` | GET | Tabelas de dados abertos (UFs, municípios, NCM, NBS, classificações) |
 | `/admin/tenants/:id/plano` | POST | Trocar plano (exige `ADMIN_TOKEN`) |
 | `/admin/usuarios/redefinicao` | POST | Gerar link de recuperação (exige `ADMIN_TOKEN`) |
+| `/admin/usuarios/confirmacao` | POST | Confirmar e-mail ou gerar o link (exige `ADMIN_TOKEN`) |
 
 Autenticação: sessão (token assinado) ou chave de API; limite de requisições por minuto e cotas mensais por plano.
 
@@ -161,7 +164,7 @@ Autenticação: sessão (token assinado) ou chave de API; limite de requisiçõe
 | `empresas` | CNPJs por escritório (chave `tenant_id + cnpj`) |
 | `analises` | Totais por análise (base, tributos atuais, CBS, IBS, documentos, itens com problema) |
 | `escritorios` | Nome, contato e logo para o relatório |
-| `redefinicoes_senha` | Hash do link, validade e uso |
+| `redefinicoes_senha` · `confirmacoes_email` | Hash do link, validade e uso (`users.email_confirmado_em` guarda a confirmação) |
 
 Não existem as tabelas `simulacoes_lote` e `lote_itens` previstas na v1.0.
 
@@ -191,15 +194,14 @@ Os números são sugestões minhas, não definição comercial.
 
 1. **Validar com as calculadoras oficiais.** Rodar `ADMIN_TOKEN=... node scripts/verificar-integracao.mjs` na máquina com Docker; mede também a memória dos contêineres. Enviar `integracao-resultado.json` se algo falhar.
 2. **Cobrança** (inexistente) e **valores reais dos planos**.
-3. **Confirmação de e-mail** (depende de definir como enviar e-mail).
-4. **Persistir o resultado do lote** para sobreviver ao fechamento da página.
-5. **DANFSe avulso sem XML**, histórico e envio por e-mail.
-6. **Recalcular o cenário do Simples** ao corrigir na Auditoria.
-7. **Excel de verdade (.xlsx)** e PDF gerado no servidor, se o cliente exigir.
-8. **Para vender com SLA:** PostgreSQL, monitoramento, backups, CI/CD para atualizar as versões oficiais.
-9. **Conferir antes de vender:** alíquotas nominais (`ALIQUOTA_CBS`, `ALIQUOTA_IBS_ESTADUAL`, `ALIQUOTA_IBS_MUNICIPAL`), licença das calculadoras oficiais, repositório privado.
-10. **Testes de ponta a ponta** com Playwright versionados no repositório (hoje as verificações de tela foram feitas fora dele, em scripts de apoio).
-11. Atualizar a apresentação de venda.
+3. **Ligar o envio de e-mail:** a recuperação de senha e a confirmação dependem de um webhook (n8n, Zapier ou função sua). Sem ele, o operador repassa os links.
+4. **DANFSe avulso sem XML**, histórico e envio por e-mail.
+5. **Recalcular o cenário do Simples** ao corrigir na Auditoria.
+6. **Excel de verdade (.xlsx)** e PDF gerado no servidor, se o cliente exigir.
+7. **Para vender com SLA:** PostgreSQL, monitoramento, backups, CI/CD para atualizar as versões oficiais.
+8. **Conferir antes de vender:** alíquotas nominais (`ALIQUOTA_CBS`, `ALIQUOTA_IBS_ESTADUAL`, `ALIQUOTA_IBS_MUNICIPAL`), licença das calculadoras oficiais, repositório privado.
+9. **Testes de ponta a ponta** com Playwright versionados no repositório (hoje as verificações de tela foram feitas fora dele, em scripts de apoio).
+10. Atualizar a apresentação de venda.
 
 ---
 
@@ -207,9 +209,9 @@ Os números são sugestões minhas, não definição comercial.
 
 - [x] 7 telas funcionais no front-end, com dados reais do servidor ou do arquivo enviado
 - [x] Isolamento por escritório e limite por plano
-- [x] `npm test` passando (27 testes)
+- [x] `npm test` passando (29 testes)
 - [x] README e Manual atualizados
 - [ ] Verificado contra as calculadoras oficiais
 - [ ] Memória dos contêineres medida com carga real
-- [ ] Cobrança, planos definidos, confirmação de e-mail
+- [ ] Cobrança, planos definidos, webhook de e-mail ligado
 - [ ] Ambiente de produção (PostgreSQL, HTTPS, monitoramento, backups)

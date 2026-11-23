@@ -210,7 +210,7 @@ test('recuperação de senha: link por webhook, uso único, sessões antigas der
   const sessaoAntiga = await cadastrar('esqueci@b.com');
   const pedir = (email) => post('/auth/esqueci', { email });
   const espera = () => new Promise((r) => setTimeout(r, 60));
-  const hooks = () => chamadas.filter((c) => c.url === '/webhook');
+  const hooks = () => chamadas.filter((c) => c.url === '/webhook' && JSON.parse(c.corpo).tipo === 'redefinicao_de_senha');
 
   // e-mail inexistente: mesma resposta, nada enviado
   chamadas.length = 0;
@@ -270,4 +270,90 @@ test('recuperação de senha: link expirado e caminho assistido do operador', as
   const { link } = await ok.json();
   assert.equal((await post('/auth/redefinir', { token: link.split('token=')[1], senha: 'nova-senha-bem-longa' })).status, 200);
   assert.equal((await post('/auth/login', { email: 'expira@b.com', senha: 'nova-senha-bem-longa' })).status, 200);
+});
+
+test('confirmação de e-mail: link no cadastro, uso único, reenvio limitado, reset de senha também confirma', async () => {
+  const espera = () => new Promise((r) => setTimeout(r, 60));
+  const hooks = () => chamadas.filter((c) => c.url === '/webhook' && JSON.parse(c.corpo).tipo === 'confirmacao_de_email');
+  chamadas.length = 0;
+  const token = await cadastrar('conf@b.com');
+  const auth = { authorization: `Bearer ${token}` };
+  await espera();
+  assert.equal(hooks().length, 1);
+  const entrega = JSON.parse(hooks()[0].corpo);
+  assert.equal(entrega.email, 'conf@b.com');
+  assert.match(entrega.link, /^https:\/\/app\.exemplo\.com\/#\/confirmar-email\?token=[\w-]{40,}$/);
+  const link = new URL(entrega.link.replace('#/', '')).searchParams.get('token');
+
+  const antes = await (await fetch(base + '/me', { headers: auth })).json();
+  assert.equal(antes.email_confirmado, false);
+  assert.equal(antes.confirmacao_obrigatoria, false);
+
+  assert.equal((await post('/auth/confirmar', { token: 'lixo' })).status, 400);
+  assert.equal((await post('/auth/confirmar', { token: link })).status, 200);
+  assert.equal((await post('/auth/confirmar', { token: link })).status, 400); // uso único
+  assert.equal((await (await fetch(base + '/me', { headers: auth })).json()).email_confirmado, true);
+
+  // já confirmado: reenvio não manda nada
+  chamadas.length = 0;
+  const jaConf = await post('/me/reenviar-confirmacao', {}, auth);
+  assert.equal((await jaConf.json()).confirmado, true);
+  await espera();
+  assert.equal(hooks().length, 0);
+
+  // não confirmado: reenvio manda link novo, no máximo 3 por hora (o do cadastro conta)
+  const t2 = await cadastrar('conf2@b.com');
+  const a2 = { authorization: `Bearer ${t2}` };
+  await espera(); // o webhook do cadastro chega depois da resposta
+  chamadas.length = 0;
+  for (let i = 0; i < 4; i++) assert.equal((await post('/me/reenviar-confirmacao', {}, a2)).status, 202);
+  await espera();
+  assert.equal(hooks().length, 2); // 1 (cadastro) + 2 reenvios = 3 no total; o 4º pedido não envia
+
+  // chave de API não reenvia
+  const k = await (await post('/keys', { nome: 'x' }, a2)).json();
+  assert.equal((await post('/me/reenviar-confirmacao', {}, { authorization: `Bearer ${k.chave}` })).status, 403);
+
+  // redefinir a senha pelo link do e-mail também confirma
+  await post('/auth/esqueci', { email: 'conf2@b.com' });
+  await espera();
+  const red = chamadas.filter((c) => c.url === '/webhook').map((c) => JSON.parse(c.corpo)).find((c) => c.tipo === 'redefinicao_de_senha');
+  const tk = new URL(red.link.replace('#/', '')).searchParams.get('token');
+  assert.equal((await post('/auth/redefinir', { token: tk, senha: 'outra-senha-longa' })).status, 200);
+  const login = await (await post('/auth/login', { email: 'conf2@b.com', senha: 'outra-senha-longa' })).json();
+  assert.equal((await (await fetch(base + '/me', { headers: { authorization: `Bearer ${login.token}` } })).json()).email_confirmado, true);
+});
+
+test('confirmação obrigatória: bloqueia o uso até confirmar; operador confirma ou gera link', async () => {
+  const dbX = abrirBanco(':memory:');
+  const gw = criarApp({
+    ...loadConfig({ AUTH_SECRET: 'y'.repeat(40), ADMIN_TOKEN: 'adm', RATE_LIMIT_PER_MINUTE: '1000', PUBLIC_DIR: '/nonexistent', PUBLIC_URL: 'https://app.exemplo.com', EXIGIR_CONFIRMACAO_EMAIL: 'true' }),
+    upstream: { regimeRegular: upBase, simplesNacional: upBase, danfse: upBase, timeoutMs: 2000 },
+  }, dbX);
+  const b = await ouvir(gw);
+  const p = (rota, corpo, h = {}) => fetch(b + rota, { method: 'POST', headers: { 'content-type': 'application/json', ...h }, body: JSON.stringify(corpo) });
+  try {
+    const cad = await (await p('/auth/register', { nome: 'Z', email: 'z@b.com', senha: 'senha-bem-longa' })).json();
+    assert.equal(cad.email_confirmacao_obrigatoria, true);
+    const auth = { authorization: `Bearer ${cad.token}` };
+    assert.equal((await fetch(b + '/empresas', { headers: auth })).status, 403);
+    const bloqueio = await fetch(b + '/empresas', { headers: auth });
+    assert.equal((await bloqueio.json()).erro?.codigo ?? 'email_nao_confirmado', 'email_nao_confirmado');
+    assert.equal((await p('/v1/calculo', {}, auth)).status, 403);
+    const eu = await (await fetch(b + '/me', { headers: auth })).json();
+    assert.equal(eu.email_confirmado, false);
+    assert.equal(eu.confirmacao_obrigatoria, true);
+
+    // operador sem token válido: negado; com token, gera o link e o usuário confirma
+    assert.equal((await p('/admin/usuarios/confirmacao', { email: 'z@b.com' }, { authorization: 'Bearer errado' })).status, 403);
+    const gerado = await (await p('/admin/usuarios/confirmacao', { email: 'z@b.com' }, { authorization: 'Bearer adm' })).json();
+    const tk = new URL(gerado.link.replace('#/', '')).searchParams.get('token');
+    assert.equal((await p('/auth/confirmar', { token: tk })).status, 200);
+    assert.equal((await fetch(b + '/empresas', { headers: auth })).status, 200);
+
+    // confirmação direta pelo operador
+    const cad2 = await (await p('/auth/register', { nome: 'W', email: 'w@b.com', senha: 'senha-bem-longa' })).json();
+    assert.equal((await p('/admin/usuarios/confirmacao', { email: 'w@b.com', confirmar: true }, { authorization: 'Bearer adm' })).status, 200);
+    assert.equal((await fetch(b + '/empresas', { headers: { authorization: `Bearer ${cad2.token}` } })).status, 200);
+  } finally { gw.close(); dbX.close(); }
 });

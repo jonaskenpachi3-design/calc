@@ -19,6 +19,7 @@ import { Router } from './router.js';
 import { API } from './api.js';
 import { esc, el, toast } from './utils.js';
 import { restaurarLote, persistirLote, apagarTodosOsLotes } from './lote-store.js';
+import { Theme } from './theme.js';
 import { CompanySelector } from './components/CompanySelector.js';
 import { Dashboard } from './components/Dashboard.js';
 import { Simulador } from './components/Simulador.js';
@@ -305,11 +306,18 @@ function renderTopbar() {
 
   topbar.innerHTML = `
     <div class="breadcrumb">Nexo Fiscal <span style="padding:0 7px;color:#bdc7d1">/</span> <strong id="crumb">${titulos[state.abaAtiva] || 'Dashboard'}</strong></div>
-    <div id="sessao" class="row">
+    <div id="sessao" class="row" style="gap: 12px; align-items: center;">
       <span class="pill pill-blue" id="plano-pill">Plano ${formatPlano(state.user?.plano)}</span>
+      <div id="theme-toggle-container"></div>
       <button class="sec" id="sair">Sair</button>
     </div>
   `;
+
+  // Inserir o seletor de tema
+  const themeContainer = document.getElementById('theme-toggle-container');
+  if (themeContainer) {
+    themeContainer.appendChild(Theme.createDropdown());
+  }
 
   document.getElementById('sair')?.addEventListener('click', async () => {
     await apagarTodosOsLotes();

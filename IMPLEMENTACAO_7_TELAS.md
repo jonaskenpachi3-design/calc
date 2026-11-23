@@ -82,7 +82,7 @@ Consequência: fechar a aba **não** perde mais o lote nem as correções da Aud
 ### 3.1 Acesso
 - Entrar e criar conta (senha de 10 a 200 caracteres).
 - **Recuperação de senha:** "Esqueci minha senha" → link de uso único, válido por 1 hora, guardado só como hash. Entrega por webhook (`RESET_WEBHOOK_URL`) ou gerado pelo operador (`POST /admin/usuarios/redefinicao`). Resposta idêntica exista ou não o e-mail; 3 pedidos por hora por conta; a troca encerra as sessões antigas.
-- **Não há envio de e-mail embutido** (sem SMTP).
+- **E-mail:** envio por SMTP embutido (`email.js`, sem biblioteca: TLS direto, STARTTLS, AUTH PLAIN/LOGIN; credenciais só por conexão criptografada ou localhost). Configure `SMTP_HOST` etc.; o webhook continua disponível como alternativa. Sem nenhum dos dois, o operador repassa os links.
 - **Confirmação de e-mail:** o cadastro dispara um link de uso único (24 h) pelo mesmo webhook (`tipo: confirmacao_de_email`). Padrão: aviso com "Reenviar link" (3 por hora). Com `EXIGIR_CONFIRMACAO_EMAIL=true`, o sistema fica bloqueado até confirmar (erro 403 `email_nao_confirmado`, tela "Confirme seu e-mail"). Contas antigas contam como confirmadas; redefinir a senha pelo link também confirma. O operador pode confirmar direto ou gerar o link (`POST /admin/usuarios/confirmacao`).
 
 ### 3.2 Carteira de CNPJs
@@ -106,19 +106,19 @@ Consequência: fechar a aba **não** perde mais o lote nem as correções da Aud
 
 ### 3.5 Auditoria
 - Lista operações com erro devolvido pela calculadora; permite corrigir NCM, NBS e classificação na tela, com busca nos catálogos.
-- ⚠️ Corrigir uma linha **não recalcula o cenário do Simples**.
+- ✅ Corrigir uma linha **recalcula também o cenário do Simples** (mesmas alíquotas e atividades informadas no lote).
 - ⚠️ As correções valem só enquanto a página estiver aberta.
 
 ### 3.6 Relatório white-label
 - Cabeçalho com nome e logo do escritório, comparativos e resumo.
-- **PDF = impressão do navegador** ("Salvar como PDF"). **"Excel" = arquivo CSV.**
-- ❌ Não há Puppeteer nem ExcelJS.
+- **PDF = impressão do navegador** ("Salvar como PDF"). **Excel = .xlsx de verdade**, gerado no navegador (`xlsx.js`, OOXML mínimo): abas Resumo e Operações, valores numéricos com formato de moeda. Também há CSV.
+- ❌ Não há PDF gerado no servidor (exigiria navegador sem tela) nem ExcelJS/Puppeteer.
 
 ### 3.7 Central DANFSe e Configurações
 - **DANFSe:** gera o PDF a partir do XML de NFS-e autorizada, em lote ou individual, via `POST /v1/danfse`; falhas aparecem por arquivo.
-- ❌ DANFSe avulso **sem XML** (digitando dados) não está disponível.
-- ❌ Histórico e envio por e-mail do DANFSe: não existem.
-- **Configurações:** dados e logo do escritório (`GET/PUT /me/escritorio`, PNG/JPEG/WebP até 300 KB, só por sessão), chaves de API (`/keys`), uso do plano, histórico.
+- ❌ DANFSe avulso **sem XML** (digitando dados) não existe, e não deve existir: o gerador oficial só aceita o XML da NFS-e autorizada.
+- ✅ Histórico recente (data, resultado, tempo) e **envio do PDF por e-mail** ao cliente (`POST /v1/danfse/email`, com SMTP; até 5 MB, limite diário por conta; o PDF não é guardado).
+- **Configurações:** dados e logo do escritório (`GET/PUT /me/escritorio`, PNG/JPEG/WebP até 300 KB, só por sessão), chaves de API (`/keys`), uso do plano, **assinatura** (planos com preço, assinar, pagar fatura, cancelar).
 
 ---
 
@@ -132,6 +132,9 @@ Consequência: fechar a aba **não** perde mais o lote nem as correções da Aud
 | `/auth/esqueci` · `/auth/redefinir` | POST | Recuperação de senha |
 | `/auth/confirmar` | POST | Confirma o e-mail pelo link |
 | `/me/reenviar-confirmacao` | POST | Novo link de confirmação (sessão) |
+| `/me/assinatura` | GET/POST/DELETE | Situação, contratação e cancelamento da assinatura (sessão) |
+| `/webhooks/asaas` | POST | Eventos de pagamento do Asaas (autenticado por `asaas-access-token`) |
+| `/v1/danfse/email` | POST | Envia por e-mail um PDF de DANFSe (SMTP) |
 | `/me` | GET | Conta atual |
 | `/me/escritorio` | GET/PUT | Dados e logo do escritório |
 | `/usage` · `/history` | GET | Uso do mês (inclui empresas) e histórico |
@@ -164,19 +167,22 @@ Autenticação: sessão (token assinado) ou chave de API; limite de requisiçõe
 | `empresas` | CNPJs por escritório (chave `tenant_id + cnpj`) |
 | `analises` | Totais por análise (base, tributos atuais, CBS, IBS, documentos, itens com problema) |
 | `escritorios` | Nome, contato e logo para o relatório |
+| `assinaturas` · `eventos_cobranca` | Assinatura por conta (plano, status, `valido_ate`) e eventos do Asaas já processados (sem repetição) |
 | `redefinicoes_senha` · `confirmacoes_email` | Hash do link, validade e uso (`users.email_confirmado_em` guarda a confirmação) |
 
 Não existem as tabelas `simulacoes_lote` e `lote_itens` previstas na v1.0.
 
 ### Planos (valores **provisórios**, em `plans.js`)
 
-| Plano | Simulações/mês | PDFs DANFSe/mês | Empresas |
-|---|---|---|---|
-| gratuito | 500 | 50 | 2 |
-| profissional | 20.000 | 2.000 | 15 |
-| ilimitado | sem limite | sem limite | sem limite |
+| Plano | Preço/mês | Simulações/mês | PDFs DANFSe/mês | Empresas |
+|---|---|---|---|---|
+| gratuito | R$ 0 | 500 | 50 | 2 |
+| profissional | R$ 149 (`PRECO_PROFISSIONAL`) | 20.000 | 2.000 | 15 |
+| ilimitado | R$ 399 (`PRECO_ILIMITADO`) | sem limite | sem limite | sem limite |
 
-Os números são sugestões minhas, não definição comercial.
+Os números são sugestões minhas, não definição comercial. Os preços mudam por variável de ambiente; os limites, em `plans.js`.
+
+**Como a cobrança funciona:** a assinatura é criada no Asaas (`billingType UNDEFINED`: o cliente escolhe Pix, boleto ou cartão na fatura). O plano só muda quando chega `PAYMENT_CONFIRMED`/`PAYMENT_RECEIVED`; o período pago vai até um mês depois do vencimento da cobrança paga (`assinaturas.valido_ate`). Passado esse prazo mais `CARENCIA_DIAS` (padrão 5), a conta passa a valer como Gratuita automaticamente, sem tarefa agendada. Estorno ou contestação suspendem na hora; cancelar mantém o plano até o fim do período pago. Eventos repetidos do Asaas são ignorados pelo `id`. Contas com plano definido pelo operador (sem assinatura) não são afetadas.
 
 ---
 
@@ -193,15 +199,15 @@ Os números são sugestões minhas, não definição comercial.
 ## 7. O que falta (ordem de importância)
 
 1. **Validar com as calculadoras oficiais.** Rodar `ADMIN_TOKEN=... node scripts/verificar-integracao.mjs` na máquina com Docker; mede também a memória dos contêineres. Enviar `integracao-resultado.json` se algo falhar.
-2. **Cobrança** (inexistente) e **valores reais dos planos**.
-3. **Ligar o envio de e-mail:** a recuperação de senha e a confirmação dependem de um webhook (n8n, Zapier ou função sua). Sem ele, o operador repassa os links.
-4. **DANFSe avulso sem XML**, histórico e envio por e-mail.
-5. **Recalcular o cenário do Simples** ao corrigir na Auditoria.
-6. **Excel de verdade (.xlsx)** e PDF gerado no servidor, se o cliente exigir.
-7. **Para vender com SLA:** PostgreSQL, monitoramento, backups, CI/CD para atualizar as versões oficiais.
-8. **Conferir antes de vender:** alíquotas nominais (`ALIQUOTA_CBS`, `ALIQUOTA_IBS_ESTADUAL`, `ALIQUOTA_IBS_MUNICIPAL`), licença das calculadoras oficiais, repositório privado.
-9. **Testes de ponta a ponta** com Playwright versionados no repositório (hoje as verificações de tela foram feitas fora dele, em scripts de apoio).
-10. Atualizar a apresentação de venda.
+2. **Contas suas, para ligar o que está pronto:**
+   - um **SMTP** (e-mail de senha, confirmação e DANFSe): variáveis `SMTP_*`;
+   - uma conta no **Asaas** (cobrança): `ASAAS_API_KEY`, `ASAAS_WEBHOOK_TOKEN` e o webhook cadastrado no painel. A integração segue a documentação do Asaas e foi testada só com um Asaas simulado: **faça a primeira rodada completa no sandbox** antes de cobrar clientes.
+3. **Decisões comerciais:** preços e limites reais dos planos (hoje R$ 0 / 149 / 399, provisórios); emissão de nota das mensalidades; termos de uso e política de privacidade.
+4. **Para vender com SLA:** PostgreSQL, monitoramento, backups, CI/CD para atualizar as versões oficiais.
+5. **Conferir antes de vender:** alíquotas nominais (`ALIQUOTA_CBS`, `ALIQUOTA_IBS_ESTADUAL`, `ALIQUOTA_IBS_MUNICIPAL`), licença das calculadoras oficiais, repositório privado.
+6. **Testes de ponta a ponta** com Playwright versionados no repositório (hoje as verificações de tela foram feitas fora dele, em scripts de apoio).
+7. **Só se o cliente exigir:** PDF gerado no servidor (hoje é a impressão do navegador), cobrança por nota ou por uso, nota fiscal automática da assinatura.
+8. Atualizar a apresentação de venda.
 
 ---
 
@@ -209,9 +215,10 @@ Os números são sugestões minhas, não definição comercial.
 
 - [x] 7 telas funcionais no front-end, com dados reais do servidor ou do arquivo enviado
 - [x] Isolamento por escritório e limite por plano
-- [x] `npm test` passando (29 testes)
+- [x] `npm test` passando (45 testes)
 - [x] README e Manual atualizados
 - [ ] Verificado contra as calculadoras oficiais
 - [ ] Memória dos contêineres medida com carga real
-- [ ] Cobrança, planos definidos, webhook de e-mail ligado
+- [x] Cobrança (Asaas), e-mail (SMTP) e Excel .xlsx implementados
+- [ ] Cobrança validada no sandbox do Asaas; SMTP ligado; preços reais definidos
 - [ ] Ambiente de produção (PostgreSQL, HTTPS, monitoramento, backups)

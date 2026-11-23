@@ -5,7 +5,7 @@
  */
 import { el, limpar, aviso, campo, dinheiro, downloadBlob, toast } from '../utils.js';
 import { lote, temLote, depsDoLote, persistirLote } from '../lote-store.js';
-import { temProblema, totais, recalcular, planilhaCorrigida, resultadoCsv, anexoDoItem, atividadesDe, dataBR, TIPO_TP } from '../lote-engine.js';
+import { temProblema, totais, recalcular, gruposSimples, planilhaCorrigida, resultadoCsv, anexoDoItem, atividadesDe, dataBR, TIPO_TP } from '../lote-engine.js';
 import { campoBusca, conferirItem } from '../catalogo.js';
 
 const lista = (x) => (Array.isArray(x) ? x : x?.itens || x?.atividades || []);
@@ -46,7 +46,7 @@ export class Auditoria {
         el('button', { class: 'sec', id: 'baixar-planilha' }, '⇩ Planilha corrigida'), el('button', { class: 'sec', id: 'baixar-csv' }, '⇩ Resultado (CSV)'),
         el('button', { class: 'sec', id: 'ir-relatorio' }, 'Gerar relatório')),
       el('div', { id: 'aud-msg', role: 'alert' }),
-      lote.resAlt.length ? el('p', { class: 'mut small' }, 'O cenário do Simples Nacional usa os dados originais do lote: se corrigir uma nota aqui, rode o lote de novo para atualizar a comparação.') : null));
+      lote.cenarioAlt ? el('p', { class: 'mut small' }, 'O comparativo com o Simples Nacional é recalculado junto, com as mesmas alíquotas e atividades informadas no lote.') : null));
 
     if (ilegiveis && this.filtro !== 'ok') {
       a.append(el('div', { class: 'card' }, el('h2', {}, `Não puderam ser lidos (${ilegiveis})`),
@@ -123,7 +123,21 @@ export class Auditoria {
       for (const it of g.entrada.itens) { const a = anexoDoItem(this.deps, g, it); if (a) novo[a] = g.entrada.aliquotas.porAnexo[a] || { ...antigas }; }
       g.entrada.aliquotas.porAnexo = novo;
     }
-    const r = await recalcular(this.api, lote.res, g); g.sujo = false; return r;
+    const r = await recalcular(this.api, lote.res, g); g.sujo = false;
+    await this.atualizarSimples(g);
+    return r;
+  }
+
+  /** Refaz o cenário do Simples Nacional desta operação a partir dos dados corrigidos. */
+  async atualizarSimples(g) {
+    if (!lote.cenarioAlt || g.regime === 'simples-nacional') return;
+    const antes = lote.resAlt.findIndex((x) => x.grupo.origemGrupo === g);
+    if (antes >= 0) lote.resAlt.splice(antes, 1);
+    lote.gruposAlt = lote.gruposAlt.filter((x) => x.origemGrupo !== g);
+    lote.problemasAlt = lote.problemasAlt.filter((p) => !(p.rot === g.rot && p.documento === g.documento));
+    const alt = await gruposSimples([g], lote.cfgAlt, this.deps);
+    lote.problemasAlt.push(...alt.problemas);
+    for (const novo of alt.grupos) { lote.gruposAlt.push(novo); await recalcular(this.api, lote.resAlt, novo); }
   }
 
   async recalcularTodos() {

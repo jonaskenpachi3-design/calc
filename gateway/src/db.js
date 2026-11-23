@@ -78,6 +78,23 @@ CREATE TABLE IF NOT EXISTS confirmacoes_email (
   usado_em INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_conf_user ON confirmacoes_email (user_id, criado_em);
+CREATE TABLE IF NOT EXISTS assinaturas (
+  tenant_id TEXT PRIMARY KEY REFERENCES tenants(id),
+  provedor TEXT NOT NULL,
+  cliente_id TEXT NOT NULL,
+  cpf_cnpj TEXT NOT NULL,
+  assinatura_id TEXT NOT NULL,
+  plano TEXT NOT NULL,
+  status TEXT NOT NULL,
+  valido_ate INTEGER NOT NULL DEFAULT 0,
+  criado_em INTEGER NOT NULL,
+  atualizado_em INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_assin_prov ON assinaturas (assinatura_id);
+CREATE TABLE IF NOT EXISTS eventos_cobranca (
+  evento_id TEXT PRIMARY KEY,
+  recebido_em INTEGER NOT NULL
+);
 `;
 
 function migrarUsuarios(db) {
@@ -156,6 +173,7 @@ export function abrirBanco(caminho) {
 const agora = () => new Date().toISOString();
 
 function criarRepositorio(db) {
+  let carenciaMs = 5 * 86400000; // tolerância depois do vencimento do período pago (ajustada por definirCarenciaDias)
   const q = {
     inserirTenant: db.prepare('INSERT INTO tenants (id, nome, plano, criado_em) VALUES (?, ?, ?, ?)'),
     inserirUser: db.prepare(
@@ -174,6 +192,13 @@ function criarRepositorio(db) {
     consumirConf: db.prepare('UPDATE confirmacoes_email SET usado_em = ? WHERE token_hash = ? AND usado_em IS NULL AND expira_em > ?'),
     confPorHash: db.prepare('SELECT * FROM confirmacoes_email WHERE token_hash = ?'),
     marcarConfirmado: db.prepare('UPDATE users SET email_confirmado_em = COALESCE(email_confirmado_em, ?) WHERE id = ?'),
+    assinaturaDoTenant: db.prepare('SELECT * FROM assinaturas WHERE tenant_id = ?'),
+    assinaturaPorId: db.prepare('SELECT * FROM assinaturas WHERE assinatura_id = ?'),
+    gravarAssinatura: db.prepare(`INSERT INTO assinaturas (tenant_id, provedor, cliente_id, cpf_cnpj, assinatura_id, plano, status, valido_ate, criado_em, atualizado_em)
+      VALUES (@tenant_id, @provedor, @cliente_id, @cpf_cnpj, @assinatura_id, @plano, @status, @valido_ate, @agora, @agora)
+      ON CONFLICT(tenant_id) DO UPDATE SET provedor=@provedor, cliente_id=@cliente_id, cpf_cnpj=@cpf_cnpj, assinatura_id=@assinatura_id, plano=@plano, status=@status, valido_ate=@valido_ate, atualizado_em=@agora`),
+    atualizarAssinatura: db.prepare('UPDATE assinaturas SET status = ?, valido_ate = ?, atualizado_em = ? WHERE tenant_id = ?'),
+    inserirEvento: db.prepare('INSERT OR IGNORE INTO eventos_cobranca (evento_id, recebido_em) VALUES (?, ?)'),
     tenantPorId: db.prepare('SELECT * FROM tenants WHERE id = ?'),
     atualizarPlano: db.prepare('UPDATE tenants SET plano = ? WHERE id = ?'),
     inserirChave: db.prepare(
@@ -265,7 +290,25 @@ function criarRepositorio(db) {
       return userId;
     },
     confirmarEmail: (userId) => q.marcarConfirmado.run(Date.now(), userId),
-    tenantPorId: (id) => q.tenantPorId.get(id),
+    /**
+     * Conta com plano efetivo: se há assinatura e o período pago (mais a carência) acabou, vale o plano gratuito.
+     * Contas sem assinatura (plano definido pelo operador) não são afetadas.
+     */
+    tenantPorId: (id) => {
+      const t = q.tenantPorId.get(id);
+      if (!t) return t;
+      const a = q.assinaturaDoTenant.get(id);
+      if (a && t.plano !== 'gratuito' && Date.now() > a.valido_ate + carenciaMs) return { ...t, plano: 'gratuito', plano_contratado: t.plano, plano_vencido: true };
+      return t;
+    },
+    definirCarenciaDias: (dias) => { carenciaMs = Math.max(0, dias) * 86400000; },
+    assinaturaDoTenant: (id) => q.assinaturaDoTenant.get(id),
+    assinaturaPorId: (assinaturaId) => q.assinaturaPorId.get(assinaturaId),
+    gravarAssinatura: (a) => { q.gravarAssinatura.run({ valido_ate: 0, ...a, agora: Date.now() }); },
+    atualizarAssinatura: (tenantId, status, validoAte) => { q.atualizarAssinatura.run(status, validoAte, Date.now(), tenantId); },
+    /** Registra o evento do provedor; devolve false se já tinha sido processado (entrega repetida). */
+    registrarEventoCobranca: (id) => q.inserirEvento.run(id, Date.now()).changes === 1,
+    esquecerEventoCobranca: (id) => { db.prepare('DELETE FROM eventos_cobranca WHERE evento_id = ?').run(id); },
     definirPlano: (tenantId, plano) => q.atualizarPlano.run(plano, tenantId).changes > 0,
 
     criarChave({ tenantId, nome, prefixo, hash }) {

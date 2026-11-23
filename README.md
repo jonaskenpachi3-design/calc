@@ -105,7 +105,23 @@ Variáveis no arquivo `.env` (nunca vai para o git):
 | `STORE_PAYLOADS` | `true` guarda o formulário preenchido no histórico. Padrão `false`, por serem dados fiscais. |
 | `ALIQUOTA_CBS`, `ALIQUOTA_IBS_ESTADUAL`, `ALIQUOTA_IBS_MUNICIPAL` | Alíquotas nominais (%) exigidas pela calculadora para datas a partir de 2027. Padrão 8,8 / 0,05 / 0,05 (valores do exemplo de teste da Receita). **Confirme antes de mostrar a clientes.** |
 
-**Recuperação de senha.** O gateway não envia e-mail sozinho (não há SMTP embutido). Ao pedir "Esqueci minha senha", ele cria um link de uso único, válido por 1 hora, e o entrega de um destes jeitos:
+**E-mail.** O gateway envia e-mail por SMTP (sem biblioteca: TLS direto, STARTTLS e login), usado na recuperação de senha, na confirmação de e-mail e no envio de DANFSe ao cliente. Use o SMTP do seu provedor (Gmail com senha de app, Amazon SES, Brevo, Locaweb etc.). Só envia a senha do SMTP por conexão criptografada.
+
+| Variável | Para que serve |
+|---|---|
+| `SMTP_HOST` | Servidor SMTP. **Vazio = e-mail desligado.** |
+| `SMTP_PORT` | Porta. Padrão 587 (STARTTLS) ou 465 com `SMTP_SECURE=true`. |
+| `SMTP_SECURE` | `true` para TLS direto (porta 465). |
+| `SMTP_USER`, `SMTP_PASS` | Login do SMTP. |
+| `SMTP_FROM` | Remetente, ex.: `Nexo Fiscal <contato@seudominio.com.br>`. Use um endereço do seu domínio, com SPF/DKIM configurados no provedor, para não cair no spam. |
+| `APP_NAME` | Nome nos e-mails. Padrão `Nexo Fiscal`. |
+| `EMAILS_POR_DIA` | Limite de DANFSe enviados por e-mail, por conta. Padrão 100. |
+
+Teste rápido: cadastre uma conta nova com um e-mail seu e veja se chega o link de confirmação. Se não chegar, o motivo aparece no log do contêiner do gateway (`docker compose logs gateway`).
+
+Sem SMTP, os links podem sair por webhook ou ser gerados pelo operador, como abaixo.
+
+**Recuperação de senha.** Ao pedir "Esqueci minha senha", ele cria um link de uso único, válido por 1 hora, e o entrega de um destes jeitos:
 
 | Variável | Para que serve |
 |---|---|
@@ -123,6 +139,22 @@ Variáveis no arquivo `.env` (nunca vai para o git):
 
 Sem webhook, o operador gera o link e o repassa ao cliente: `curl -X POST $URL/admin/usuarios/redefinicao -H "Authorization: Bearer $ADMIN_TOKEN" -H 'content-type: application/json' -d '{"email":"cliente@x.com"}'`. O sistema responde igual exista ou não o e-mail, aceita 3 pedidos por hora por conta, guarda só o hash do link, e a troca encerra as sessões antigas.
 
+**Cobrança (Asaas).** Com `ASAAS_API_KEY`, a tela Configurações passa a vender os planos Profissional e Ilimitado por assinatura mensal (o cliente escolhe Pix, boleto ou cartão na fatura do Asaas; o sistema não guarda dados de cartão). O plano só muda quando o Asaas confirma o pagamento; se o período pago vence e não há renovação, a conta volta ao Gratuito depois de alguns dias de tolerância.
+
+1. Crie a conta no Asaas e gere a chave de API (use primeiro a chave do **sandbox**, que começa com `$aact_hmlg_`; o sistema detecta sozinho).
+2. No Asaas, em Integrações → Webhooks, cadastre a URL `https://SEU-DOMINIO/webhooks/asaas`, defina um **token de autenticação** (32+ caracteres) e marque os eventos de **cobranças** e de **assinaturas**.
+3. Coloque no `.env`: `ASAAS_API_KEY`, `ASAAS_WEBHOOK_TOKEN` (o mesmo token) e `PUBLIC_URL`.
+4. Teste no sandbox: assine, pague a fatura de teste e veja o plano mudar. Só depois troque pela chave de produção (`$aact_prod_`).
+
+| Variável | Para que serve |
+|---|---|
+| `ASAAS_API_KEY` | Chave da API. Vazio = cobrança desligada (o plano é trocado pelo operador). |
+| `ASAAS_WEBHOOK_TOKEN` | Token que o Asaas envia no webhook. Sem ele, o webhook recusa tudo. |
+| `PRECO_PROFISSIONAL`, `PRECO_ILIMITADO` | Preço mensal em reais. Padrão 149 e 399 (**valores provisórios**). Os limites de cada plano ficam em `gateway/src/plans.js`. |
+| `CARENCIA_DIAS` | Dias de tolerância depois do fim do período pago. Padrão 5. |
+
+> **Não testado contra o Asaas de verdade.** A integração segue a documentação do Asaas e foi testada com um servidor Asaas simulado. Faça a primeira rodada completa no sandbox antes de cobrar clientes. Confira também com o Asaas e com seu contador a emissão de nota fiscal das mensalidades.
+
 Outras variáveis do gateway (valores padrão em `gateway/src/config.js`): `PORT`, `DB_PATH`, `SESSION_TTL_SECONDS`, `UPSTREAM_REGIME_REGULAR`, `UPSTREAM_SIMPLES_NACIONAL`, `UPSTREAM_DANFSE`, limites de tamanho, `MAX_OPERACOES_LOTE` (padrão 200 por chamada) e `RATE_LIMIT_PER_MINUTE`.
 
 ## Uso
@@ -133,10 +165,10 @@ Fluxo completo para o cliente:
 2. **Visão geral:** faturamento analisado, carga atual (tributos informados nas notas), projeção de CBS + IBS, diferença e gráfico por mês. Os números vêm das análises que você salvou (só totais; notas e itens nunca são guardados). Sem análises, a tela diz isso em vez de mostrar números.
 3. **Simular tributos:** uma operação por vez, regime normal ou Simples Nacional, com busca de NCM/NBS por nome e aviso de classificação incompatível. Cada cálculo salva os totais na Visão geral.
 4. **Simulador em lote:** arraste XML (NF-e, NFC-e, NFS-e), ZIP de XMLs ou a planilha CSV (até 500 operações). Opção de também simular o Simples Nacional para comparar. Mostra progresso e leva à Auditoria.
-5. **Auditoria:** filtros Todos / Com erro / Validados, correção na própria tela (código com busca por nome, classificação, valor, atividade), recálculo de uma nota ou de todas as corrigidas, planilha corrigida e resultado em CSV. Botão *Salvar na Visão geral* (salvar de novo substitui os totais anteriores do lote).
-6. **Relatório:** abas Resumo executivo e Memória de cálculo, painel com logotipo e parecer do contador, PDF pela impressão do navegador e planilha (CSV que o Excel abre). Nome, responsável, CRC, contato e cor do escritório ficam salvos na conta.
-7. **Central DANFSe:** XML(s) ou ZIP de NFS-e para PDFs, com canhoto opcional, ZIP de PDFs e histórico recente (só data, resultado e tempo).
-8. **Configurações:** uso do plano (CNPJs, simulações e PDFs do mês), dados do escritório e chaves de API para integração. *Aumentar limite* abre um e-mail para o comercial: não há cobrança integrada.
+5. **Auditoria:** filtros Todos / Com erro / Validados, correção na própria tela (código com busca por nome, classificação, valor, atividade), recálculo de uma nota ou de todas as corrigidas (o comparativo com o Simples Nacional é refeito junto), planilha corrigida e resultado em CSV. Botão *Salvar na Visão geral* (salvar de novo substitui os totais anteriores do lote).
+6. **Relatório:** abas Resumo executivo e Memória de cálculo, painel com logotipo e parecer do contador, PDF pela impressão do navegador, Excel (.xlsx, com abas Resumo e Operações) e CSV. Nome, responsável, CRC, contato e cor do escritório ficam salvos na conta.
+7. **Central DANFSe:** XML(s) ou ZIP de NFS-e para PDFs, com canhoto opcional, ZIP de PDFs, envio do PDF por e-mail ao cliente (com SMTP configurado; o PDF não fica guardado) e histórico recente (só data, resultado e tempo).
+8. **Configurações:** uso do plano (CNPJs, simulações e PDFs do mês), dados do escritório e chaves de API para integração. Com o Asaas configurado, mostra os planos com preço e leva ao pagamento (assinar, pagar a fatura, cancelar); sem ele, *Aumentar limite* abre um e-mail para o comercial.
 
 A tela segue o protótipo "Nexo Fiscal": menu lateral, painel de visão geral com o uso real da conta, cartões e formulários guiados. As funções do protótipo que ainda não existem (carteira de CNPJs, auditoria completa, comparativo) aparecem no menu como "Em breve", sem dados de mentira. Para trocar o nome da marca, edite `gateway/public/index.html` (busque por "nexo fiscal").
 
@@ -230,13 +262,13 @@ Leia antes de vender.
 - **Código do produto ou serviço:** o cliente pode buscar pelo nome, mas a busca é por palavras na descrição oficial (não há sinônimos nem nome comercial). O aviso de classificação incompatível depende da resposta da calculadora oficial e ainda não foi testado contra ela.
 - **Simples Nacional:** a alíquota efetiva é informada pelo usuário (extrato do PGDAS-D); o sistema não a calcula. ISS retido e benefícios municipais usam padrões.
 - **Imposto Seletivo e compra governamental** não estão no formulário.
-- **Sem cobrança.** O e-mail (recuperação de senha e confirmação) depende do seu webhook; não há SMTP embutido.
+- **Cobrança e e-mail dependem de contas suas** (Asaas e um SMTP); sem elas ficam desligados. A cobrança não foi testada contra o Asaas real.
 - **SQLite:** serve para uma instância. Para escalar, troque por PostgreSQL.
 - **XML no lote** só vale para o regime normal, e notas antigas sem o grupo de CBS e IBS vêm sem classificação tributária (completa-se na tela). Os layouts foram conferidos com os XMLs de exemplo da Receita, não com notas reais de clientes.
 - **Modelo atual (ICMS, ISS, PIS, COFINS):** nenhuma calculadora da Receita o calcula. O comparativo usa os valores informados na nota ou na planilha, é bruto (sem créditos) e, nas NFS-e, só conhece o ISS. Emitentes do Simples ficam fora (o DAS é único).
 - **Comparativo Simples × regular** soma só CBS e IBS: não inclui o restante do DAS nem os créditos do regime regular.
-- **Relatório em PDF** vem da impressão do navegador (sem servidor de PDF); a "planilha Excel" é um CSV. Não há gráficos além de barras simples. O resultado detalhado do lote não vai para o servidor: fica guardado no navegador deste computador (por empresa, até 7 dias) e é apagado ao clicar em Sair, em Limpar/Novo lote, ou se o navegador bloquear o armazenamento local (aí fica só na memória e some ao fechar a página). Em computador compartilhado, use sempre Sair.
-- **Cenário Simples no lote** usa as mesmas alíquotas efetivas e atividade para todas as notas e não é atualizado quando você corrige uma nota na Auditoria (rode o lote de novo).
+- **Relatório em PDF** vem da impressão do navegador (sem servidor de PDF); o Excel é um .xlsx gerado no navegador. Não há gráficos além de barras simples. O resultado detalhado do lote não vai para o servidor: fica guardado no navegador deste computador (por empresa, até 7 dias) e é apagado ao clicar em Sair, em Limpar/Novo lote, ou se o navegador bloquear o armazenamento local (aí fica só na memória e some ao fechar a página). Em computador compartilhado, use sempre Sair.
+- **Cenário Simples no lote** usa as mesmas alíquotas efetivas e atividade para todas as notas; ao corrigir uma nota na Auditoria ele é recalculado com esses mesmos parâmetros.
 - **Visão geral:** a carga atual só considera operações com tributos atuais informados; a porcentagem usa a base de todas as análises e pode ficar subestimada se parte delas não tiver esse dado.
 - **Avulso do DANFSe** (preencher dados sem XML) não existe: o gerador oficial só aceita o XML.
 - **Consulta de CNPJ** no cadastro de empresas usa APIs públicas chamadas direto pelo navegador.

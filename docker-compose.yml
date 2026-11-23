@@ -59,6 +59,29 @@ services:
       AUTH_SECRET: ${AUTH_SECRET:?defina AUTH_SECRET (32+ caracteres) no .env}
       ADMIN_TOKEN: ${ADMIN_TOKEN:?defina ADMIN_TOKEN no .env}
       STORE_PAYLOADS: ${STORE_PAYLOADS:-false}
+      # Endereço público, e-mail, confirmação e cobrança: ver README (variáveis do gateway). Vazio = desligado/padrão.
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:3000}
+      APP_NAME: ${APP_NAME:-}
+      RESET_WEBHOOK_URL: ${RESET_WEBHOOK_URL:-}
+      RESET_WEBHOOK_TOKEN: ${RESET_WEBHOOK_TOKEN:-}
+      RESET_TTL_SECONDS: ${RESET_TTL_SECONDS:-}
+      CONFIRM_TTL_SECONDS: ${CONFIRM_TTL_SECONDS:-}
+      EXIGIR_CONFIRMACAO_EMAIL: ${EXIGIR_CONFIRMACAO_EMAIL:-false}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      EMAILS_POR_DIA: ${EMAILS_POR_DIA:-}
+      ASAAS_API_KEY: ${ASAAS_API_KEY:-}
+      ASAAS_WEBHOOK_TOKEN: ${ASAAS_WEBHOOK_TOKEN:-}
+      PRECO_PROFISSIONAL: ${PRECO_PROFISSIONAL:-}
+      PRECO_ILIMITADO: ${PRECO_ILIMITADO:-}
+      CARENCIA_DIAS: ${CARENCIA_DIAS:-}
+      ALIQUOTA_CBS: ${ALIQUOTA_CBS:-}
+      ALIQUOTA_IBS_ESTADUAL: ${ALIQUOTA_IBS_ESTADUAL:-}
+      ALIQUOTA_IBS_MUNICIPAL: ${ALIQUOTA_IBS_MUNICIPAL:-}
       UPSTREAM_REGIME_REGULAR: http://regime-regular:8080
       UPSTREAM_SIMPLES_NACIONAL: http://simples-nacional:8082
       UPSTREAM_DANFSE: http://danfse:8080

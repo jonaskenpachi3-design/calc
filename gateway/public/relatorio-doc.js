@@ -4,6 +4,7 @@
  */
 import { el, dinheiro, pct, downloadBlob } from './utils.js';
 import { lote } from './lote-store.js';
+import { gerarXlsx } from './xlsx.js';
 import { totais, comparativoAtual, comparativoRegimes, temProblema, dataBR, decimalBR } from './lote-engine.js';
 
 const ROTULO = { 'regime-normal': 'Regime normal (lucro presumido ou real)', 'simples-nacional': 'Simples Nacional' };
@@ -79,16 +80,34 @@ export function imprimir(folha) {
   window.print();
 }
 
-/** Planilha (CSV que o Excel abre) com resumo e operações. */
-export function exportarPlanilha(d) {
-  const cel = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"'; const num = (v) => (v === null || v === undefined ? '' : String(v).replace('.', ','));
-  const linhas = [['Resumo'], ['Total CBS+IBS', num(d.t.total)], ['CBS', num(d.t.cbs)], ['IBS', num(d.t.ibs)], ['Operações sem problemas', `${d.t.ok} de ${d.t.operacoes}`]];
-  if (d.comp?.comparavel) linhas.push(['Tributos atuais (informados)', num(d.comp.atual)], ['CBS+IBS comparável', num(d.comp.novo)], ['Diferença', num(d.comp.diferenca)]);
-  if (d.regimes?.comparadas) linhas.push(['CBS+IBS regime normal (comparadas)', num(d.regimes.regular)], ['CBS+IBS Simples (comparadas)', num(d.regimes.simples)]);
-  linhas.push([], ['Documento', 'Data', 'Item', 'Descrição', 'NCM/NBS', 'Classificação', 'Base', 'CBS', 'IBS', 'Total', 'Situação']);
+/** Resumo e operações do relatório como linhas de planilha (números de verdade, sem formatação). */
+export function linhasDoRelatorio(d) {
+  const M = (v) => (v === null || v === undefined ? null : { v, e: 'moeda' });
+  const resumo = [[{ v: 'Resumo do lote', e: 'titulo' }], [], [{ v: 'Total CBS+IBS', e: 'negrito' }, M(d.t.total)], ['CBS', M(d.t.cbs)], ['IBS', M(d.t.ibs)], ['Operações sem problemas', `${d.t.ok} de ${d.t.operacoes}`]];
+  if (d.comp?.comparavel) resumo.push(['Tributos atuais (informados)', M(d.comp.atual)], ['CBS+IBS comparável', M(d.comp.novo)], ['Diferença', M(d.comp.diferenca)]);
+  if (d.regimes?.comparadas) resumo.push(['CBS+IBS regime normal (comparadas)', M(d.regimes.regular)], ['CBS+IBS Simples (comparadas)', M(d.regimes.simples)]);
+  const ops = [['Documento', 'Data', 'Item', 'Descrição', 'NCM/NBS', 'Classificação', 'Base', 'CBS', 'IBS', 'Total', 'Situação'].map((v) => ({ v, e: 'negrito' }))];
   for (const x of lote.res) {
-    if (!x.ok) { linhas.push([x.grupo.documento, x.grupo.entrada.data, '', '', '', '', '', '', '', '', x.erro]); continue; }
-    x.resultado.itens.forEach((it, k) => { const o = x.grupo.entrada.itens[k] || {}; linhas.push([x.grupo.documento, x.grupo.entrada.data, x.grupo.linhas[k] ?? k + 1, it.descricao || o.descricao, o.codigo, o.classificacao, num(it.base), num(it.cbs), num(it.ibs), num(it.total), temProblema(x) ? 'com problema' : 'calculado']); });
+    if (!x.ok) { ops.push([x.grupo.documento, x.grupo.entrada.data, '', '', '', '', '', '', '', '', x.erro]); continue; }
+    x.resultado.itens.forEach((it, k) => { const o = x.grupo.entrada.itens[k] || {}; ops.push([x.grupo.documento, x.grupo.entrada.data, x.grupo.linhas[k] ?? k + 1, it.descricao || o.descricao, o.codigo, o.classificacao, M(it.base), M(it.cbs), M(it.ibs), M(it.total), temProblema(x) ? 'com problema' : 'calculado']); });
   }
+  return { resumo, ops };
+}
+
+/** Excel de verdade (.xlsx): aba Resumo e aba Operações, com números e formato de moeda. */
+export function exportarXlsx(d) {
+  const { resumo, ops } = linhasDoRelatorio(d);
+  downloadBlob(gerarXlsx([
+    { nome: 'Resumo', larguras: [38, 20], linhas: resumo },
+    { nome: 'Operações', larguras: [16, 12, 7, 36, 14, 14, 14, 14, 14, 14, 18], linhas: ops },
+  ]), 'relatorio-cbs-ibs.xlsx');
+}
+
+/** CSV (separador ;) para quem prefere abrir em outro programa. */
+export function exportarPlanilha(d) {
+  const { resumo, ops } = linhasDoRelatorio(d);
+  const txt = (c) => { const v = c && typeof c === 'object' ? c.v : c; return v === null || v === undefined ? '' : typeof v === 'number' ? String(v).replace('.', ',') : String(v); };
+  const cel = (c) => '"' + txt(c).replace(/"/g, '""') + '"';
+  const linhas = [...resumo, [], ...ops];
   downloadBlob(new Blob(['﻿' + linhas.map((l) => l.map(cel).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8' }), 'relatorio-cbs-ibs.csv');
 }

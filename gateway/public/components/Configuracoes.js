@@ -1,7 +1,7 @@
 /**
  * Nexo Fiscal — Configurações e assinatura
  * Uso do plano (CNPJs, simulações, PDFs), dados do escritório (saem nos relatórios) e chaves de API.
- * Sem cobrança integrada ainda: "Aumentar limite" leva ao contato comercial.
+ * Assinatura paga pelo Asaas (Pix, boleto ou cartão); sem cobrança configurada, "Aumentar limite" leva ao contato comercial.
  */
 import { el, limpar, aviso, campo, toast } from '../utils.js';
 import { carregarEscritorio, salvarEscritorio, reduzirLogo } from '../escritorio.js';
@@ -35,8 +35,7 @@ export class Configuracoes {
 
   desenharPlano(u) {
     const c = document.getElementById('cfg-plano'); limpar(c); c.append(el('h2', {}, 'Plano e uso'));
-    c.append(el('div', { class: 'row', style: 'align-items:center;justify-content:space-between' }, el('div', {}, el('div', { class: 'mut small' }, 'Plano atual'), el('strong', {}, PLANOS[u.plano] || u.plano)),
-      el('a', { class: 'sec', style: 'display:inline-block;padding:8px 14px;border-radius:8px', id: 'btn-upgrade', href: 'mailto:contato@nexofiscal.com.br?subject=Aumentar%20limite%20do%20plano' }, 'Aumentar limite')));
+    c.append(el('div', {}, el('div', { class: 'mut small' }, 'Plano atual'), el('strong', {}, PLANOS[u.plano] || u.plano)));
     for (const [rec, v] of Object.entries(u.uso)) {
       const p = v.limite === null ? 0 : Math.min(100, (v.usado / Math.max(1, v.limite)) * 100);
       c.append(el('div', { style: 'margin-top:12px' }, el('div', { style: 'display:flex;justify-content:space-between;margin-bottom:4px' }, el('span', {}, NOMES[rec] || rec),
@@ -44,6 +43,93 @@ export class Configuracoes {
         el('div', { class: 'bar' }, el('i', { style: `width:${p}%;background:${p > 85 ? 'var(--red)' : p > 65 ? 'var(--amber)' : 'var(--teal)'}` }))));
     }
     c.append(el('p', { class: 'mut small', style: 'margin-top:12px' }, 'Os limites de simulações e PDFs zeram todo mês. O limite de CNPJs é a quantidade de empresas cadastradas ao mesmo tempo.'));
+    c.append(el('div', { id: 'assinatura', style: 'margin-top:16px;padding-top:16px;border-top:1px solid var(--bd)' }));
+    this.carregarAssinatura();
+  }
+
+  // ---------- assinatura (Asaas) ----------
+
+  async carregarAssinatura() {
+    const c = document.getElementById('assinatura'); if (!c) return;
+    try {
+      const [st, pl] = await Promise.all([this.api.get('/me/assinatura'), this.api.get('/planos')]);
+      this.desenharAssinatura(c, st, pl.planos);
+    } catch {
+      limpar(c); c.append(el('a', { class: 'sec', style: 'display:inline-block;padding:8px 14px;border-radius:8px', href: 'mailto:contato@nexofiscal.com.br?subject=Aumentar%20limite%20do%20plano' }, 'Aumentar limite'));
+    }
+  }
+
+  desenharAssinatura(c, st, planos) {
+    limpar(c);
+    c.append(el('h3', {}, 'Assinatura'));
+    const a = st.assinatura;
+    const brl = (v) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const recarregar = el('button', { class: 'sec', style: 'margin-left:8px' }, 'Atualizar');
+    recarregar.onclick = () => this.carregarAssinatura();
+
+    if (st.plano_vencido) c.append(el('div', { class: 'msg warn' }, `Seu plano venceu e a conta voltou ao Gratuito. Pague a fatura em aberto para reativar.`));
+    if (a?.status === 'aguardando_pagamento') {
+      c.append(el('div', { class: 'msg' }, `Assinatura do plano ${PLANOS[a.plano]} aguardando pagamento. Assim que o Asaas confirmar, o plano muda sozinho (pode levar alguns minutos no boleto).`));
+    } else if (a?.status === 'ativa') {
+      c.append(el('p', {}, `Plano ${PLANOS[a.plano]} ativo, pago até ${fmtData(a.valido_ate)}. Renovação mensal.`));
+    } else if (a?.status === 'cancelada' && a.valido_ate && new Date(a.valido_ate) > new Date()) {
+      c.append(el('p', {}, `Assinatura cancelada. O plano ${PLANOS[st.plano] || st.plano} continua até ${fmtData(a.valido_ate)}.`));
+    } else if (a?.status === 'suspensa') {
+      c.append(el('div', { class: 'msg warn' }, 'Assinatura suspensa por estorno ou contestação do pagamento. Fale com o suporte ou contrate novamente.'));
+    }
+    const acoes = el('div', { class: 'row', style: 'gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0' });
+    if (a?.url) acoes.append(el('a', { class: 'sec', style: 'display:inline-block;padding:8px 14px;border-radius:8px', href: a.url, target: '_blank', rel: 'noopener noreferrer' }, 'Pagar fatura'));
+    if (a && a.status !== 'cancelada' && a.status !== 'suspensa') {
+      const cancelar = el('button', { class: 'sec' }, 'Cancelar assinatura');
+      cancelar.onclick = async () => {
+        if (!window.confirm('Cancelar a assinatura? O plano continua até o fim do período já pago.')) return;
+        try { const r = await this.api.delete('/me/assinatura'); toast(r.mensagem, 'ok', 6000); this.carregarAssinatura(); } catch (e) { toast(e.message, 'err', 6000); }
+      };
+      acoes.append(cancelar);
+    }
+    if (a) acoes.append(recarregar);
+    c.append(acoes);
+
+    if (!st.cobranca_ativa) {
+      c.append(el('a', { class: 'sec', style: 'display:inline-block;padding:8px 14px;border-radius:8px', href: 'mailto:contato@nexofiscal.com.br?subject=Aumentar%20limite%20do%20plano' }, 'Aumentar limite'));
+      return;
+    }
+    const lista = el('div', { class: 'grid' });
+    for (const id of ['profissional', 'ilimitado']) {
+      const lim = planos[id] || {};
+      const txt = (n) => (n === null || n === undefined ? 'sem limite' : n.toLocaleString('pt-BR'));
+      const atual = a?.status === 'ativa' && a.plano === id && !st.plano_vencido;
+      const botao = el('button', { disabled: atual }, atual ? 'Plano atual' : `Assinar ${PLANOS[id]}`);
+      botao.onclick = () => this.formularioAssinar(c, id, st.precos[id]);
+      lista.append(el('div', { class: 'card', style: 'padding:14px' },
+        el('strong', {}, PLANOS[id]), el('div', { style: 'font-size:1.4em;margin:4px 0' }, `${brl(st.precos[id])}/mês`),
+        el('ul', { class: 'mut small', style: 'padding-left:18px;margin:6px 0 10px' },
+          el('li', {}, `${txt(lim.empresas)} CNPJs`), el('li', {}, `${txt(lim.calculo)} simulações por mês`), el('li', {}, `${txt(lim.danfse)} PDFs DANFSe por mês`)),
+        botao));
+    }
+    c.append(lista, el('div', { id: 'assinar-form' }));
+  }
+
+  formularioAssinar(c, plano, preco) {
+    const caixa = document.getElementById('assinar-form'); limpar(caixa);
+    const doc = el('input', { id: 'as-doc', inputmode: 'numeric', maxlength: 18, placeholder: 'CPF ou CNPJ de quem paga', autocomplete: 'off' });
+    const nome = el('input', { id: 'as-nome', maxlength: 120, placeholder: 'Nome ou razão social na cobrança', value: this.state.user?.nome || '' });
+    const ir = el('button', {}, `Ir para o pagamento (${preco.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}/mês)`);
+    ir.onclick = async () => {
+      ir.disabled = true; aviso('as-msg');
+      try {
+        const r = await this.api.post('/me/assinatura', { plano, cpfCnpj: doc.value, nome: nome.value });
+        if (r.url) window.open(r.url, '_blank', 'noopener');
+        toast(r.url ? 'Fatura aberta em outra aba. Escolha Pix, boleto ou cartão.' : 'Assinatura criada. O link da fatura aparece aqui em instantes.', 'ok', 7000);
+        this.carregarAssinatura();
+      } catch (e) { aviso('as-msg', e.message, 'err'); }
+      ir.disabled = false;
+    };
+    caixa.append(el('div', { class: 'card', style: 'padding:14px;margin-top:12px' }, el('h3', {}, `Assinar plano ${PLANOS[plano]}`),
+      campo('CPF ou CNPJ', 'quem vai pagar', doc, 'as-doc'), campo('Nome na cobrança', '', nome, 'as-nome'),
+      el('div', { id: 'as-msg' }), el('div', { class: 'row', style: 'margin-top:10px' }, ir),
+      el('p', { class: 'mut small' }, 'O pagamento é feito no ambiente seguro do Asaas (Pix, boleto ou cartão). Não guardamos dados de cartão.')));
+    doc.focus();
   }
 
   desenharEscritorio() {

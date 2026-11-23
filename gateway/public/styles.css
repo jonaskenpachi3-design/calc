@@ -1246,3 +1246,38 @@ code.key {
     page-break-after: auto;
   }
 }
+/* ==========================================================================
+   Relatório (tela e impressão em PDF)
+   ========================================================================== */
+#folha { display: none; }
+.folha { --marca: #0f766e; background: #fff; color: #111; border: 1px solid var(--bd); border-radius: 10px; padding: 22px 26px; }
+.folha .rel-cab { display: flex; align-items: center; gap: 16px; border-bottom: 3px solid var(--marca); padding-bottom: 12px; margin-bottom: 16px; }
+.folha .rel-cab img { max-height: 64px; max-width: 200px; object-fit: contain; }
+.folha .rel-cab .nome { font-size: 18px; font-weight: 800; color: var(--marca); }
+.folha .rel-cab .sub { font-size: 12px; color: #555; }
+.folha h1 { font-size: 22px; margin: 6px 0 2px; }
+.folha h2 { font-size: 15px; margin: 18px 0 6px; color: var(--marca); }
+.folha table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.folha th { text-align: left; border-bottom: 2px solid var(--marca); padding: 5px 6px; }
+.folha td { border-bottom: 1px solid #ddd; padding: 5px 6px; vertical-align: top; }
+.folha .n { text-align: right; white-space: nowrap; }
+.folha .rel-kpis { display: flex; gap: 10px; flex-wrap: wrap; margin: 10px 0; }
+.folha .rel-kpi { border: 1px solid #ccc; border-left: 4px solid var(--marca); padding: 8px 12px; min-width: 130px; }
+.folha .rel-kpi b { display: block; font-size: 16px; }
+.folha .rel-kpi span { font-size: 11px; color: #555; }
+.folha .rel-barra { display: flex; align-items: center; gap: 8px; margin: 4px 0; font-size: 12px; }
+.folha .rel-barra .r { width: 190px; }
+.folha .rel-barra .b { height: 14px; background: var(--marca); border-radius: 3px; min-width: 2px; }
+.folha .rel-barra .b.alt { background: #9aa5b1; }
+.folha .rel-nota { font-size: 11px; color: #555; margin: 4px 0; }
+.folha .rel-parecer { border-left: 4px solid var(--marca); background: #f6f8f9; padding: 8px 12px; margin: 12px 0; font-size: 12px; white-space: pre-wrap; }
+.folha .rel-rodape { margin-top: 24px; border-top: 1px solid #ccc; padding-top: 8px; font-size: 11px; color: #555; }
+.rel-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
+.logo-previa { max-height: 64px; max-width: 220px; display: block; margin: 8px 0; border: 1px dashed var(--bd); padding: 4px; background: #fff; }
+@media (max-width: 900px) { .rel-layout { grid-template-columns: 1fr; } }
+@page { margin: 14mm; }
+@media print {
+  body.relat > *:not(#folha) { display: none !important; }
+  body.relat #folha { display: block; }
+  body.relat #folha .folha { border: 0; padding: 0; }
+}

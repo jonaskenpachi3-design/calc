@@ -17,6 +17,7 @@ if ('serviceWorker' in navigator) {
 import { State } from './state.js';
 import { Router } from './router.js';
 import { API } from './api.js';
+import { esc } from './utils.js';
 import { CompanySelector } from './components/CompanySelector.js';
 import { Dashboard } from './components/Dashboard.js';
 import { Simulador } from './components/Simulador.js';
@@ -94,7 +95,9 @@ function renderApp() {
   const appRoot = document.getElementById('app-root');
   if (!appRoot) return;
 
-  if (!state.token) {
+  // Link de redefinição de senha: abre a tela mesmo com sessão ativa.
+  if (/^#\/redefinir\?token=/.test(window.location.hash)) components.login = null;
+  if (!state.token || components.login?.modo === 'redefinir') {
     // Não logado → Tela de Login/Planos
     if (!components.login) {
       components.login = new LoginScreen(state, api, router);
@@ -160,9 +163,9 @@ function renderSidebar() {
     <div class="side-label">Empresa</div>
     <div class="nav" aria-label="Empresa ativa">
       <button class="nav-item" disabled style="justify-content: flex-start;">
-        <span class="nav-num">${inicial}</span>
+        <span class="nav-num">${esc(inicial)}</span>
         <span>
-          <div class="nav-text">${empresa?.razao_social || 'Empresa'}</div>
+          <div class="nav-text">${esc(empresa?.razao_social || 'Empresa')}</div>
           <div class="nav-cap">${formatRegime(empresa?.regime_atual)}</div>
         </span>
         <span class="pill pill-blue" style="margin-left: auto; font-size: 11px;">${empresa?.cnpj ? formatCNPJ(empresa.cnpj) : ''}</span>
@@ -182,9 +185,9 @@ function renderSidebar() {
     </nav>
 
     <div class="sidebar-bottom">
-      <div class="avatar" id="avatar">${inicial}</div>
+      <div class="avatar" id="avatar">${esc(inicial)}</div>
       <div>
-        <div class="user-name" id="quem">${state.user?.nome || 'Sua conta'}</div>
+        <div class="user-name" id="quem">${esc(state.user?.nome || 'Sua conta')}</div>
         <div class="user-role" id="papel">Plano ${formatPlano(state.user?.plano)}</div>
       </div>
     </div>

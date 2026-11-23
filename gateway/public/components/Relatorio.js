@@ -1,74 +1,70 @@
 /**
- * Nexo Fiscal — Relatorio Component (Placeholder Fase 1)
- * ==========================================================================
- * Relatório White-Label — implementação na Fase 3.
+ * Nexo Fiscal — Relatório white-label
+ * Abas Resumo executivo / Memória de cálculo, painel com logotipo e parecer do contador,
+ * PDF pela impressão do navegador ("Salvar como PDF") e planilha para Excel (CSV).
  */
-
-import { el, limpar, aviso } from '../utils.js';
+import { el, limpar, aviso, campo, dinheiro } from '../utils.js';
+import { lote, temLote } from '../lote-store.js';
+import { dadosDoRelatorio, montarFolha, imprimir, exportarPlanilha, cargaEstimadaNum } from '../relatorio-doc.js';
+import { carregarEscritorio, salvarEscritorio, reduzirLogo } from '../escritorio.js';
 
 export class Relatorio {
-  constructor(state, api, router) {
-    this.state = state;
-    this.api = api;
-    this.router = router;
-  }
+  constructor(state, api, router) { this.state = state; this.api = api; this.router = router; this.aba = 'resumo'; this.parecer = ''; this.escritorio = {}; }
 
   render() {
     const div = el('div', { id: 'aba-relatorio' });
-    div.innerHTML = `
-      <div class="page-head">
-        <div class="eyebrow">Exportação</div>
-        <h1>Relatório Comparativo White-Label</h1>
-        <p>Gere relatórios profissionais com logo do escritório e parecer do contador.</p>
-      </div>
-
-      <div class="card" style="margin-bottom: 20px; padding: 20px; text-align: center; background: var(--blue-soft); border-color: var(--blue);">
-        <div style="font-size: 48px; margin-bottom: 12px;">📊</div>
-        <h2 style="margin: 0 0 8px; color: var(--blue);">Relatório White-Label — Fase 3</h2>
-        <p class="mut" style="max-width: 600px; margin: 0 auto;">
-          Duas abas + painel lateral de personalização PDF.
-          <br>PDF via Puppeteer (pixel-perfect) + Excel via ExcelJS.
-        </p>
-      </div>
-
-      <div class="card">
-        <h3>Estrutura</h3>
-        <div class="grid" style="margin-top: 12px;">
-          <div>
-            <strong>Aba 1: Resumo Executivo</strong>
-            <ul style="margin: 8px 0; padding-left: 20px;">
-              <li>Gráfico de impacto (Chart.js)</li>
-              <li>Recomendação de melhor regime</li>
-              <li>Cards: Economia, % Redução</li>
-            </ul>
-          </div>
-          <div>
-            <strong>Aba 2: Memória de Cálculo</strong>
-            <ul style="margin: 8px 0; padding-left: 20px;">
-              <li>Tabela nota a nota</li>
-              <li>Base, CBS, IBS, IS, Total</li>
-              <li>Base legal (LC 116, etc.)</li>
-            </ul>
-          </div>
-          <div>
-            <strong>Painel PDF (Lateral)</strong>
-            <ul style="margin: 8px 0; padding-left: 20px;">
-              <li>Upload Logo do escritório</li>
-              <li>Parecer do contador (textarea)</li>
-              <li>[Baixar PDF] [Exportar Excel]</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-
-      <div class="card">
-        <h3>Tecnologia</h3>
-        <p class="mut">Puppeteer no gateway (Chromium Alpine ~150MB) renderiza HTML → PDF com header/footer personalizados (logo, CRC, paginação).</p>
-      </div>
-    `;
+    div.append(el('div', { class: 'page-head' }, el('div', { class: 'eyebrow' }, 'Exportação'), el('h1', {}, 'Relatório com a marca do escritório'),
+      el('p', {}, 'Resumo para o cliente e memória de cálculo, prontos para PDF ou planilha.')), el('div', { id: 'rel' }));
     return div;
   }
 
-  mount() {}
+  async mount() { this.escritorio = await carregarEscritorio(this.api); this.desenhar(); }
+
+  desenhar() {
+    const r = document.getElementById('rel'); if (!r) return; limpar(r);
+    if (!temLote()) {
+      r.append(el('div', { class: 'card' }, el('h2', {}, 'Nenhum lote para o relatório'), el('p', { class: 'mut' }, 'Processe um lote para gerar o relatório. Os resultados ficam só neste navegador.'), el('button', { id: 'ir-lote' }, 'Ir para o simulador em lote')));
+      document.getElementById('ir-lote').onclick = () => this.router.navigate('lote'); return;
+    }
+    const d = dadosDoRelatorio();
+    const aba = (id, rotulo) => el('button', { class: this.aba === id ? '' : 'sec', 'data-aba-rel': id, onclick: () => { this.aba = id; this.desenhar(); } }, rotulo);
+    const previa = el('div', { id: 'previa-rel' }, montarFolha(d, { aba: this.aba, parecer: this.parecer, escritorio: this.escritorio, empresa: this.state.empresaAtiva }));
+    const col = el('div', {}, el('div', { class: 'row noprint' }, aba('resumo', 'Resumo executivo'), aba('memoria', 'Memória de cálculo')));
+    if (this.aba === 'resumo' && d.comp && lote.regime === 'regime-normal') {
+      const pctIn = el('input', { id: 'carga-est', inputmode: 'decimal', placeholder: 'ex.: 18', value: lote.cargaEstimada, style: 'max-width:120px' });
+      pctIn.addEventListener('change', () => { lote.cargaEstimada = pctIn.value; this.desenhar(); });
+      col.append(el('div', { class: 'card noprint' }, campo('Carga atual estimada (%) para notas sem tributos informados', 'Opcional. Sem isso, essas notas ficam fora do comparativo.', pctIn, 'carga-est')));
+    }
+    col.append(previa);
+    r.append(el('div', { class: 'rel-layout' }, col, this.painel(d)));
+  }
+
+  painel(d) {
+    const e = this.escritorio; const msg = el('div', { id: 'painel-msg', role: 'alert' });
+    const logo = el('img', { class: 'logo-previa', alt: 'Logotipo', src: e.logo || '', hidden: !e.logo });
+    const arq = el('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp', id: 'logo-arq', hidden: true });
+    arq.onchange = async () => {
+      const f = arq.files[0]; if (!f) return;
+      try { const dataUrl = await reduzirLogo(f); await salvarEscritorio(this.api, { ...e, logo: dataUrl }); this.escritorio = { ...e, logo: dataUrl }; this.desenhar(); }
+      catch (err) { aviso('painel-msg', err.message, 'err'); }
+    };
+    const parecer = el('textarea', { id: 'parecer', rows: 6, maxlength: 1500, placeholder: 'Escreva aqui sua análise para o cliente. Ela aparece no resumo do PDF.' });
+    parecer.value = this.parecer;
+    parecer.addEventListener('input', () => { this.parecer = parecer.value; });
+    parecer.addEventListener('change', () => this.desenhar());
+    const memoria = el('input', { type: 'checkbox', id: 'pdf-memoria', checked: true });
+    const dadosFaltando = !e.nome;
+    return el('aside', { class: 'card noprint' }, el('h3', {}, 'Personalizar'),
+      dadosFaltando ? el('div', { class: 'msg warn small' }, 'Cadastre o nome do escritório, responsável e CRC em Configurações para saírem no relatório.') : null,
+      logo, el('div', { class: 'row' }, el('button', { class: 'sec', id: 'logo-btn', onclick: () => arq.click() }, e.logo ? 'Trocar logotipo' : 'Enviar logotipo'), e.logo ? el('button', { class: 'sec', id: 'logo-remover', onclick: async () => { try { await salvarEscritorio(this.api, { ...e, logo: null }); this.escritorio = { ...e, logo: null }; this.desenhar(); } catch (err) { aviso('painel-msg', err.message, 'err'); } } }, 'Remover') : null), arq,
+      campo('Parecer do contador', 'Opcional. Vale só para este relatório.', parecer, 'parecer'),
+      el('label', { style: 'display:flex;gap:8px;align-items:center;margin:8px 0' }, memoria, 'Incluir memória de cálculo no PDF'),
+      msg,
+      el('div', { class: 'row' }, el('button', { id: 'baixar-pdf', onclick: () => imprimir(montarFolha(d, { aba: memoria.checked ? 'tudo' : 'resumo', parecer: this.parecer, escritorio: this.escritorio, empresa: this.state.empresaAtiva })) }, '⇩ Baixar relatório em PDF'),
+        el('button', { class: 'sec', id: 'baixar-xls', onclick: () => exportarPlanilha(d) }, '⇩ Exportar planilha (Excel)')),
+      el('p', { class: 'mut small' }, 'No PDF, escolha "Salvar como PDF" na janela de impressão. A planilha é um CSV que o Excel abre direto.'),
+      el('button', { class: 'link', onclick: () => this.router.navigate('configuracoes') }, 'Editar dados do escritório'));
+  }
+
   unmount() {}
 }

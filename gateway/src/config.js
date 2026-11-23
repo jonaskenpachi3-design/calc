@@ -13,6 +13,11 @@ export function loadConfig(env = process.env) {
     authSecret: env.AUTH_SECRET || '',
     adminToken: env.ADMIN_TOKEN || '',
     sessionTtlSeconds: int(env.SESSION_TTL_SECONDS, 8 * 3600),
+    // Recuperação de senha: o link é entregue por webhook (serviço de e-mail/automação seu) ou gerado pelo operador.
+    publicUrl: (env.PUBLIC_URL || `http://localhost:${int(env.PORT, 3000)}`).replace(/\/$/, ''),
+    resetWebhookUrl: env.RESET_WEBHOOK_URL || '',
+    resetWebhookToken: env.RESET_WEBHOOK_TOKEN || '',
+    resetTtlSeconds: int(env.RESET_TTL_SECONDS, 3600),
     upstream: {
       regimeRegular: env.UPSTREAM_REGIME_REGULAR || 'http://regime-regular:8080',
       simplesNacional: env.UPSTREAM_SIMPLES_NACIONAL || 'http://simples-nacional:8082',

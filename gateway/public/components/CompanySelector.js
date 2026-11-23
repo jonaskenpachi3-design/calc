@@ -5,7 +5,7 @@
  * Permite buscar, listar e cadastrar novas empresas do contador.
  */
 
-import { el, limpar, aviso, campo, formatCNPJ, criarModal, toast, debounce, semAcento } from '../utils.js';
+import { esc, el, limpar, aviso, campo, formatCNPJ, criarModal, toast, debounce, semAcento } from '../utils.js';
 
 export class CompanySelector {
   constructor(state, api, router) {
@@ -108,21 +108,21 @@ export class CompanySelector {
 
     card.innerHTML = `
       <div style="display: flex; align-items: flex-start; gap: 12px; margin-bottom: 16px;">
-        <div class="avatar" style="width: 48px; height: 48px; font-size: 16px; flex: none;">${inicial}</div>
+        <div class="avatar" style="width: 48px; height: 48px; font-size: 16px; flex: none;">${esc(inicial)}</div>
         <div style="flex: 1; min-width: 0;">
-          <h3 style="margin: 0 0 4px; font-size: 16px;">${emp.razao_social}</h3>
+          <h3 style="margin: 0 0 4px; font-size: 16px;">${esc(emp.razao_social)}</h3>
           <div class="mut small" style="margin-bottom: 8px;">${formatCNPJ(emp.cnpj)}</div>
           <div class="row" style="gap: 8px; flex-wrap: wrap;">
             <span class="pill pill-blue">${regimeLabel}</span>
-            <span class="pill pill-gray">${emp.cnae_principal || 'CNAE não informado'}</span>
+            <span class="pill pill-gray">${esc(emp.cnae_principal || 'CNAE não informado')}</span>
           </div>
         </div>
       </div>
       <div style="margin-top: auto; padding-top: 16px; border-top: 1px solid var(--bd); display: flex; justify-content: space-between; align-items: center; gap: 8px;">
         <div class="mut small">Última simulação: <strong>${ultimaSim}</strong></div>
         <div style="display: flex; gap: 8px;">
-          <button class="btn-excluir sec" data-cnpj="${emp.cnpj}" style="min-width: 100px;" title="Excluir empresa">Excluir</button>
-          <button class="btn-acessar" data-cnpj="${emp.cnpj}" style="min-width: 140px;">Acessar Painel</button>
+          <button class="btn-excluir sec" data-cnpj="${esc(emp.cnpj)}" style="min-width: 100px;" title="Excluir empresa">Excluir</button>
+          <button class="btn-acessar" data-cnpj="${esc(emp.cnpj)}" style="min-width: 140px;">Acessar Painel</button>
         </div>
       </div>
     `;
@@ -314,10 +314,10 @@ export class CompanySelector {
     const preview = document.getElementById('preview-dados');
     container.hidden = false;
     preview.innerHTML = `
-      <strong>Razão Social:</strong> ${dados.razao_social || '—'}<br>
-      <strong>Nome Fantasia:</strong> ${dados.nome_fantasia || '—'}<br>
-      <strong>CNAE Principal:</strong> ${dados.cnae_fiscal_principal || '—'}<br>
-      ${dados.endereco ? `<strong>Endereço:</strong> ${dados.endereco.logradouro}, ${dados.endereco.numero} - ${dados.endereco.municipio}/${dados.endereco.uf}` : ''}
+      <strong>Razão Social:</strong> ${esc(dados.razao_social || '—')}<br>
+      <strong>Nome Fantasia:</strong> ${esc(dados.nome_fantasia || '—')}<br>
+      <strong>CNAE Principal:</strong> ${esc(dados.cnae_fiscal_principal || '—')}<br>
+      ${dados.endereco ? `<strong>Endereço:</strong> ${esc(dados.endereco.logradouro)}, ${esc(dados.endereco.numero)} - ${esc(dados.endereco.municipio)}/${esc(dados.endereco.uf)}` : ''}
     `;
   }
 

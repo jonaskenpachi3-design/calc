@@ -4,6 +4,7 @@ import http from 'node:http';
 import { loadConfig } from '../src/config.js';
 import { abrirBanco } from '../src/db.js';
 import { criarApp } from '../src/app.js';
+import { sha256 } from '../src/auth.js';
 
 let upstream, gateway, base, upBase, db;
 const chamadas = [];
@@ -27,7 +28,7 @@ before(async () => {
 
   db = abrirBanco(':memory:');
   const config = {
-    ...loadConfig({ AUTH_SECRET: 'x'.repeat(40), ADMIN_TOKEN: 'adm', RATE_LIMIT_PER_MINUTE: '1000', PUBLIC_DIR: '/nonexistent' }),
+    ...loadConfig({ AUTH_SECRET: 'x'.repeat(40), ADMIN_TOKEN: 'adm', RATE_LIMIT_PER_MINUTE: '1000', PUBLIC_DIR: '/nonexistent', PUBLIC_URL: 'https://app.exemplo.com', RESET_WEBHOOK_URL: `${upBase}/webhook`, RESET_WEBHOOK_TOKEN: 'segredo-webhook' }),
     upstream: { regimeRegular: upBase, simplesNacional: upBase, danfse: upBase, timeoutMs: 2000 },
   };
   gateway = criarApp(config, db);
@@ -138,4 +139,135 @@ test('busca por nome e conferência de cadastro: endpoints liberados e encaminha
     assert.equal(chamadas.at(-1).url, destino);
   }
   assert.equal((await fetch(base + '/v1/dados/classificacoes-tributarias/outra', { headers: auth })).status, 404);
+});
+
+const CNPJ_A = '11222333000181';
+const novaEmpresa = (auth, cnpj = CNPJ_A) => post('/empresas', { cnpj, razao_social: 'Empresa Teste', regime_atual: 'lucro-presumido' }, auth);
+
+test('análises: só totais, validação, dashboard real e vazio sem inventar números', async () => {
+  const t = await cadastrar('dash@b.com');
+  const auth = { authorization: `Bearer ${t}` };
+  assert.equal((await novaEmpresa(auth)).status, 201);
+  const vazio = await (await fetch(`${base}/empresas/${CNPJ_A}/dashboard`, { headers: auth })).json();
+  assert.equal(vazio.vazio, true);
+  assert.equal(vazio.faturamentoAnalisado.valor, 0);
+  assert.equal(vazio.diferenca.valor, null);
+
+  const ok = { origem: 'lote', regime: 'regime-normal', documentos: 10, itens: 12, itensComProblema: 2, base: 1000, cbs: 90, ibs: 10, total: 100, tributosAtuais: 80, cbsIbsComparavel: 100 };
+  const salva = await post(`/empresas/${CNPJ_A}/analises`, ok, auth);
+  assert.equal(salva.status, 201);
+  const { id: idSalva } = await salva.json();
+  assert.ok(idSalva > 0);
+  assert.equal((await post(`/empresas/${CNPJ_A}/analises`, { ...ok, base: -1 }, auth)).status, 400);
+  assert.equal((await post(`/empresas/${CNPJ_A}/analises`, { ...ok, origem: 'x' }, auth)).status, 400);
+  assert.equal((await post(`/empresas/11222333000182/analises`, ok, auth)).status, 404);
+
+  const d = await (await fetch(`${base}/empresas/${CNPJ_A}/dashboard`, { headers: auth })).json();
+  assert.equal(d.vazio, false);
+  assert.equal(d.faturamentoAnalisado.valor, 1000);
+  assert.equal(d.faturamentoAnalisado.qtdNotas, 10);
+  assert.equal(d.cargaAtual.valor, 80);
+  assert.equal(d.projecaoReforma.valor, 100);
+  assert.equal(d.diferenca.valor, 20);
+  assert.equal(d.diferenca.tipo, 'aumento');
+  assert.equal(d.alertas[0].qtd, 2);
+  assert.equal(d.grafico.labels.length, 6);
+
+  // substituir uma análise (apagar e salvar de novo) não dobra os números
+  assert.equal((await fetch(`${base}/empresas/${CNPJ_A}/analises/${idSalva}`, { method: 'DELETE', headers: auth })).status, 200);
+  assert.equal((await fetch(`${base}/empresas/${CNPJ_A}/analises/${idSalva}`, { method: 'DELETE', headers: auth })).status, 404);
+  assert.equal((await (await fetch(`${base}/empresas/${CNPJ_A}/dashboard`, { headers: auth })).json()).vazio, true);
+});
+
+test('empresas: isoladas entre escritórios e limitadas pelo plano', async () => {
+  const t1 = await cadastrar('iso1@b.com');
+  const t2 = await cadastrar('iso2@b.com');
+  const a1 = { authorization: `Bearer ${t1}` }; const a2 = { authorization: `Bearer ${t2}` };
+  assert.equal((await novaEmpresa(a1)).status, 201);
+  assert.equal((await novaEmpresa(a2)).status, 201, 'mesmo CNPJ em outro escritório não pode colidir');
+  assert.equal((await fetch(`${base}/empresas/${CNPJ_A}/dashboard`, { headers: a2 })).status, 200);
+  assert.equal((await novaEmpresa(a1, '11444777000161')).status, 201);
+  const estouro = await novaEmpresa(a1, '07526557000100');
+  assert.equal(estouro.status, 403);
+  assert.equal((await estouro.json()).erro?.codigo ?? (await estouro.clone().json()).codigo, 'limite_empresas');
+});
+
+test('dados do escritório: grava com login, recusa chave de API e logotipo inválido', async () => {
+  const t = await cadastrar('esc@b.com');
+  const auth = { authorization: `Bearer ${t}` };
+  const png = 'data:image/png;base64,iVBORw0KGgo=';
+  const r = await fetch(base + '/me/escritorio', { method: 'PUT', headers: { ...auth, 'content-type': 'application/json' }, body: JSON.stringify({ nome: 'Contab X', crc: 'CRC-SP 1', cor: '#112233', logo: png }) });
+  assert.equal(r.status, 200);
+  assert.equal((await (await fetch(base + '/me/escritorio', { headers: auth })).json()).nome, 'Contab X');
+  const ruim = await fetch(base + '/me/escritorio', { method: 'PUT', headers: { ...auth, 'content-type': 'application/json' }, body: JSON.stringify({ logo: 'data:text/html;base64,AAAA' }) });
+  assert.equal(ruim.status, 400);
+  const k = await (await post('/keys', { nome: 'x' }, auth)).json();
+  const viaChave = await fetch(base + '/me/escritorio', { method: 'PUT', headers: { authorization: `Bearer ${k.chave}`, 'content-type': 'application/json' }, body: '{}' });
+  assert.equal(viaChave.status, 403);
+});
+
+test('recuperação de senha: link por webhook, uso único, sessões antigas derrubadas, limite por hora', async () => {
+  const sessaoAntiga = await cadastrar('esqueci@b.com');
+  const pedir = (email) => post('/auth/esqueci', { email });
+  const espera = () => new Promise((r) => setTimeout(r, 60));
+  const hooks = () => chamadas.filter((c) => c.url === '/webhook');
+
+  // e-mail inexistente: mesma resposta, nada enviado
+  chamadas.length = 0;
+  const desconhecido = await pedir('naoexiste@b.com');
+  assert.equal(desconhecido.status, 202);
+  const corpoDesconhecido = await desconhecido.json();
+  await espera();
+  assert.equal(hooks().length, 0);
+
+  // e-mail existente: mesma resposta, link entregue ao webhook
+  const conhecido = await pedir('esqueci@b.com');
+  assert.equal(conhecido.status, 202);
+  assert.deepEqual(await conhecido.json(), corpoDesconhecido);
+  await espera();
+  assert.equal(hooks().length, 1);
+  const entrega = JSON.parse(hooks()[0].corpo);
+  assert.equal(entrega.tipo, 'redefinicao_de_senha');
+  assert.equal(entrega.email, 'esqueci@b.com');
+  assert.match(entrega.link, /^https:\/\/app\.exemplo\.com\/#\/redefinir\?token=[\w-]{40,}$/);
+  const token = entrega.link.split('token=')[1];
+
+  // senha fraca e token inválido são recusados sem gastar o link
+  assert.equal((await post('/auth/redefinir', { token, senha: 'curta' })).status, 400);
+  assert.equal((await post('/auth/redefinir', { token: 'x'.repeat(43), senha: 'nova-senha-bem-longa' })).status, 400);
+
+  assert.equal((await fetch(base + '/me', { headers: { authorization: `Bearer ${sessaoAntiga}` } })).status, 200);
+  const trocou = await post('/auth/redefinir', { token, senha: 'nova-senha-bem-longa' });
+  assert.equal(trocou.status, 200);
+
+  // uso único; senha antiga não entra mais; nova entra; sessão anterior à troca é derrubada
+  assert.equal((await post('/auth/redefinir', { token, senha: 'outra-senha-bem-longa' })).status, 400);
+  assert.equal((await post('/auth/login', { email: 'esqueci@b.com', senha: 'senha-bem-longa' })).status, 401);
+  const login = await post('/auth/login', { email: 'esqueci@b.com', senha: 'nova-senha-bem-longa' });
+  assert.equal(login.status, 200);
+  assert.equal((await fetch(base + '/me', { headers: { authorization: `Bearer ${sessaoAntiga}` } })).status, 401);
+  assert.equal((await fetch(base + '/me', { headers: { authorization: `Bearer ${(await login.json()).token}` } })).status, 200);
+
+  // no máximo 3 pedidos por hora (o primeiro já foi gasto acima)
+  chamadas.length = 0;
+  for (let i = 0; i < 4; i++) await pedir('esqueci@b.com');
+  await espera();
+  assert.equal(hooks().length, 2, 'só mais 2 links dentro do limite de 3 por hora');
+});
+
+test('recuperação de senha: link expirado e caminho assistido do operador', async () => {
+  await cadastrar('expira@b.com');
+  const user = db.usuarioPorEmail('expira@b.com');
+  const velho = 'v'.repeat(43);
+  db.criarRedefinicao(user.id, sha256(velho), -1);
+  assert.equal((await post('/auth/redefinir', { token: velho, senha: 'nova-senha-bem-longa' })).status, 400);
+
+  const pedido = (cred, email) => fetch(base + '/admin/usuarios/redefinicao', { method: 'POST', headers: { authorization: `Bearer ${cred}`, 'content-type': 'application/json' }, body: JSON.stringify({ email }) });
+  assert.equal((await pedido('errado', 'expira@b.com')).status, 403);
+  assert.equal((await pedido('adm', 'ninguem@b.com')).status, 404);
+  const ok = await pedido('adm', 'expira@b.com');
+  assert.equal(ok.status, 200);
+  const { link } = await ok.json();
+  assert.equal((await post('/auth/redefinir', { token: link.split('token=')[1], senha: 'nova-senha-bem-longa' })).status, 200);
+  assert.equal((await post('/auth/login', { email: 'expira@b.com', senha: 'nova-senha-bem-longa' })).status, 200);
 });

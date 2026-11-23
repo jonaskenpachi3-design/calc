@@ -105,21 +105,31 @@ Variáveis no arquivo `.env` (nunca vai para o git):
 | `STORE_PAYLOADS` | `true` guarda o formulário preenchido no histórico. Padrão `false`, por serem dados fiscais. |
 | `ALIQUOTA_CBS`, `ALIQUOTA_IBS_ESTADUAL`, `ALIQUOTA_IBS_MUNICIPAL` | Alíquotas nominais (%) exigidas pela calculadora para datas a partir de 2027. Padrão 8,8 / 0,05 / 0,05 (valores do exemplo de teste da Receita). **Confirme antes de mostrar a clientes.** |
 
+**Recuperação de senha.** O gateway não envia e-mail sozinho (não há SMTP embutido). Ao pedir "Esqueci minha senha", ele cria um link de uso único, válido por 1 hora, e o entrega de um destes jeitos:
+
+| Variável | Para que serve |
+|---|---|
+| `PUBLIC_URL` | Endereço público do sistema, usado para montar o link (ex.: `https://app.seudominio.com.br`). |
+| `RESET_WEBHOOK_URL` | Opcional. O gateway faz um POST JSON `{tipo, email, link, expira_em}` neste endereço (Zapier, n8n, sua função de e-mail). |
+| `RESET_WEBHOOK_TOKEN` | Opcional. Enviado como `Authorization: Bearer`. |
+| `RESET_TTL_SECONDS` | Validade do link. Padrão 3600. |
+
+Sem webhook, o operador gera o link e o repassa ao cliente: `curl -X POST $URL/admin/usuarios/redefinicao -H "Authorization: Bearer $ADMIN_TOKEN" -H 'content-type: application/json' -d '{"email":"cliente@x.com"}'`. O sistema responde igual exista ou não o e-mail, aceita 3 pedidos por hora por conta, guarda só o hash do link, e a troca encerra as sessões antigas.
+
 Outras variáveis do gateway (valores padrão em `gateway/src/config.js`): `PORT`, `DB_PATH`, `SESSION_TTL_SECONDS`, `UPSTREAM_REGIME_REGULAR`, `UPSTREAM_SIMPLES_NACIONAL`, `UPSTREAM_DANFSE`, limites de tamanho, `MAX_OPERACOES_LOTE` (padrão 200 por chamada) e `RATE_LIMIT_PER_MINUTE`.
 
 ## Uso
 
 Fluxo completo para o cliente:
 
-1. Criar a conta (nome da empresa, e-mail, senha de 10 caracteres ou mais) e entrar. A primeira tela é a **Visão geral** (uso do mês e atividade recente).
-2. **Simular tributos:** escolher “regime normal” ou “Simples Nacional”, preencher a operação e os itens, clicar em **Calcular tributos**.
-3. **PDF da nota de serviço:** enviar o XML da NFS-e e baixar o DANFSe.
-4. **Simulador em lote:** baixar a planilha modelo, preencher uma linha por item, enviar o CSV (até 500 operações) ou os XMLs das notas (NF-e, NFC-e e NFS-e, só regime normal) e ver totais, problemas por linha e o resultado para baixar. Em cada operação com problema há o botão **Corrigir**: abre os itens na própria tela (com busca pelo nome do produto), recalcula e permite baixar a planilha já corrigida.
-5. **Comparativos:** no lote do regime normal, a tabela "tributos atuais × CBS e IBS" usa o que a nota (XML) ou a coluna `tributos_atuais` da planilha informa, ou uma carga estimada (%) digitada por você. Numa simulação, o botão "Comparar com o Simples Nacional" (ou "com o regime regular") mantém os itens e pede só o que falta para rodar o outro regime.
-6. **Relatório com a marca do escritório:** em *Minha conta* o escritório informa nome, logotipo, cor e contato (salvos no navegador). Os botões "Relatório com a marca do escritório" abrem a impressão do navegador, de onde se salva em PDF.
-7. **Busca por nome:** no formulário, o campo "Não sabe o código? Busque pelo nome" procura na lista oficial de NCM (produtos) ou NBS (serviços) vigente na data da operação. Se a classificação escolhida não se aplicar ao código, aparece um aviso (não bloqueia o cálculo).
-5. **Minhas simulações:** consultar o histórico.
-6. **Minha conta:** ver plano, uso do mês e (escondidas) chaves de API para integração.
+1. Criar a conta (nome do escritório, e-mail, senha de 10 caracteres ou mais) e entrar. Em seguida vem a **Carteira de CNPJs**: cadastre cada cliente (CNPJ, razão social, regime) e clique em *Acessar painel*. O plano limita quantos CNPJs podem ficar cadastrados (gratuito 2, profissional 15, valores de partida).
+2. **Visão geral:** faturamento analisado, carga atual (tributos informados nas notas), projeção de CBS + IBS, diferença e gráfico por mês. Os números vêm das análises que você salvou (só totais; notas e itens nunca são guardados). Sem análises, a tela diz isso em vez de mostrar números.
+3. **Simular tributos:** uma operação por vez, regime normal ou Simples Nacional, com busca de NCM/NBS por nome e aviso de classificação incompatível. Cada cálculo salva os totais na Visão geral.
+4. **Simulador em lote:** arraste XML (NF-e, NFC-e, NFS-e), ZIP de XMLs ou a planilha CSV (até 500 operações). Opção de também simular o Simples Nacional para comparar. Mostra progresso e leva à Auditoria.
+5. **Auditoria:** filtros Todos / Com erro / Validados, correção na própria tela (código com busca por nome, classificação, valor, atividade), recálculo de uma nota ou de todas as corrigidas, planilha corrigida e resultado em CSV. Botão *Salvar na Visão geral* (salvar de novo substitui os totais anteriores do lote).
+6. **Relatório:** abas Resumo executivo e Memória de cálculo, painel com logotipo e parecer do contador, PDF pela impressão do navegador e planilha (CSV que o Excel abre). Nome, responsável, CRC, contato e cor do escritório ficam salvos na conta.
+7. **Central DANFSe:** XML(s) ou ZIP de NFS-e para PDFs, com canhoto opcional, ZIP de PDFs e histórico recente (só data, resultado e tempo).
+8. **Configurações:** uso do plano (CNPJs, simulações e PDFs do mês), dados do escritório e chaves de API para integração. *Aumentar limite* abre um e-mail para o comercial: não há cobrança integrada.
 
 A tela segue o protótipo "Nexo Fiscal": menu lateral, painel de visão geral com o uso real da conta, cartões e formulários guiados. As funções do protótipo que ainda não existem (carteira de CNPJs, auditoria completa, comparativo) aparecem no menu como "Em breve", sem dados de mentira. Para trocar o nome da marca, edite `gateway/public/index.html` (busque por "nexo fiscal").
 
@@ -218,7 +228,24 @@ Leia antes de vender.
 - **XML no lote** só vale para o regime normal, e notas antigas sem o grupo de CBS e IBS vêm sem classificação tributária (completa-se na tela). Os layouts foram conferidos com os XMLs de exemplo da Receita, não com notas reais de clientes.
 - **Modelo atual (ICMS, ISS, PIS, COFINS):** nenhuma calculadora da Receita o calcula. O comparativo usa os valores informados na nota ou na planilha, é bruto (sem créditos) e, nas NFS-e, só conhece o ISS. Emitentes do Simples ficam fora (o DAS é único).
 - **Comparativo Simples × regular** soma só CBS e IBS: não inclui o restante do DAS nem os créditos do regime regular.
-- **Relatório em PDF** vem da impressão do navegador (sem servidor de PDF); a marca fica salva no navegador, não na conta, e não há gráficos além de barras simples.
+- **Relatório em PDF** vem da impressão do navegador (sem servidor de PDF); a "planilha Excel" é um CSV. Não há gráficos além de barras simples. O resultado do lote fica só na memória do navegador: ao fechar a página, processe de novo.
+- **Cenário Simples no lote** usa as mesmas alíquotas efetivas e atividade para todas as notas e não é atualizado quando você corrige uma nota na Auditoria (rode o lote de novo).
+- **Visão geral:** a carga atual só considera operações com tributos atuais informados; a porcentagem usa a base de todas as análises e pode ficar subestimada se parte delas não tiver esse dado.
+- **Avulso do DANFSe** (preencher dados sem XML) não existe: o gerador oficial só aceita o XML.
+- **Consulta de CNPJ** no cadastro de empresas usa APIs públicas chamadas direto pelo navegador.
+
+## Verificação com as calculadoras oficiais
+
+Os testes automáticos (`npm test`) usam calculadoras falsas. Antes de vender, rode o roteiro que usa as reais:
+
+```sh
+./scripts/setup.sh && docker compose up --build -d      # na raiz do projeto
+ADMIN_TOKEN=$(grep ADMIN_TOKEN .env | cut -d= -f2) node scripts/verificar-integracao.mjs
+```
+
+O script cria uma conta descartável, confere o formato de cada resposta real (tabelas, regime normal, Simples com uma conta conhecida, lote, DANFSe), roda uma carga e mede a memória de cada contêiner (pico, limite, reinícios, morte por falta de memória), sugerindo valores de `MEM_JAVA` e `JAVA_XMX`. Grava `integracao-resultado.json` com tudo; se algo falhar, envie esse arquivo. Opções: `--url`, `--xml nota.xml` (NFS-e autorizada para o DANFSe), `--total`, `--conc`. Sem `ADMIN_TOKEN`, a conta fica no plano gratuito e a carga estoura a cota.
+
+Ele ainda não foi executado contra as calculadoras reais (o ambiente de desenvolvimento não compila as imagens oficiais). Foi validado só contra as falsas. Os valores de memória do `docker-compose.yml` continuam sendo estimativas até esse roteiro rodar.
 
 ## Licença das calculadoras oficiais
 

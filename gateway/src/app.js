@@ -2,7 +2,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  hashSenha, conferirSenha, emitirToken, verificarToken, gerarChaveApi, sha256, compararSegredos,
+  hashSenha, conferirSenha, emitirToken, verificarToken, gerarChaveApi, sha256, compararSegredos, tokenAleatorio,
 } from './auth.js';
 import { PLANOS, limiteDoPlano, inicioDoMes } from './plans.js';
 import { chamar, CacheTtl } from './upstream.js';
@@ -100,6 +100,9 @@ export function criarApp(config, db) {
     }
     const claims = verificarToken(credencial, config.authSecret);
     if (!claims) throw new HttpError(401, 'token_invalido', 'Sessão inválida ou expirada');
+    // Sessões emitidas antes da última troca de senha deixam de valer.
+    const dono = db.usuarioPorId(claims.uid);
+    if (!dono || (claims.iat || 0) < dono.senha_alterada_em) throw new HttpError(401, 'token_invalido', 'Sessão inválida ou expirada');
     return { tenantId: claims.tid, userId: claims.uid, via: 'sessao' };
   }
 
@@ -239,6 +242,51 @@ export function criarApp(config, db) {
       return responder(res, 200, { token });
     }
 
+    // --- recuperação de senha ---
+    const linkDeRedefinicao = (userId) => {
+      const token = tokenAleatorio();
+      const expira = db.criarRedefinicao(userId, sha256(token), config.resetTtlSeconds);
+      return { link: `${config.publicUrl}/#/redefinir?token=${token}`, expira_em: new Date(expira).toISOString() };
+    };
+
+    if (metodo === 'POST' && pathname === '/auth/esqueci') {
+      const { email } = await lerJson(req, 2_000);
+      const resposta = { mensagem: 'Se este e-mail tiver cadastro, enviaremos as instruções para criar uma nova senha.' };
+      if (!emailValido(email)) return responder(res, 202, resposta);
+      const user = db.usuarioPorEmail(email.trim().toLowerCase());
+      // No máximo 3 pedidos por hora por conta; a resposta é a mesma existindo ou não o e-mail.
+      if (user && db.redefinicoesRecentes(user.id, Date.now() - 3600_000) < 3) {
+        const { link, expira_em: expiraEm } = linkDeRedefinicao(user.id);
+        if (config.resetWebhookUrl) {
+          fetch(config.resetWebhookUrl, {
+            method: 'POST', signal: AbortSignal.timeout(5000),
+            headers: { 'content-type': 'application/json', ...(config.resetWebhookToken ? { authorization: `Bearer ${config.resetWebhookToken}` } : {}) },
+            body: JSON.stringify({ tipo: 'redefinicao_de_senha', email: user.email, link, expira_em: expiraEm }),
+          }).catch((e) => console.error('Falha ao entregar a redefinição de senha:', e.message));
+        }
+      }
+      return responder(res, 202, resposta);
+    }
+
+    if (metodo === 'POST' && pathname === '/auth/redefinir') {
+      const { token, senha } = await lerJson(req, 2_000);
+      if (typeof senha !== 'string' || senha.length < 10 || senha.length > 200) throw new HttpError(400, 'senha_fraca', 'A senha deve ter de 10 a 200 caracteres');
+      const userId = typeof token === 'string' && token.length >= 20 && token.length <= 100 ? db.gastarRedefinicao(sha256(token)) : null;
+      if (!userId) throw new HttpError(400, 'link_invalido', 'Este link expirou ou já foi usado. Peça um novo em "Esqueci minha senha".');
+      db.redefinirSenha(userId, await hashSenha(senha));
+      return responder(res, 200, { mensagem: 'Senha alterada. Entre com a nova senha.' });
+    }
+
+    // Recuperação assistida: o operador gera o link e passa ao cliente por um canal confiável.
+    if (metodo === 'POST' && pathname === '/admin/usuarios/redefinicao') {
+      const enviado = (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+      if (!config.adminToken || !compararSegredos(enviado, config.adminToken)) throw new HttpError(403, 'proibido', 'Token de administração inválido');
+      const { email } = await lerJson(req, 2_000);
+      const user = typeof email === 'string' ? db.usuarioPorEmail(email.trim().toLowerCase()) : null;
+      if (!user) throw new HttpError(404, 'nao_encontrado', 'Usuário não encontrado');
+      return responder(res, 200, linkDeRedefinicao(user.id));
+    }
+
     // --- administração (operador do SaaS) ---
     const mAdmin = /^\/admin\/tenants\/([\w-]+)\/plano$/.exec(pathname);
     if (metodo === 'PUT' && mAdmin) {
@@ -278,6 +326,10 @@ export function criarApp(config, db) {
       if (!regime_atual || !['simples-nacional', 'lucro-presumido', 'lucro-real'].includes(regime_atual)) {
         throw new HttpError(400, 'regime_invalido', 'Regime deve ser: simples-nacional, lucro-presumido ou lucro-real');
       }
+      const limiteEmpresas = limiteDoPlano(db.tenantPorId(ctx.tenantId).plano, 'empresas');
+      if (limiteEmpresas !== null && db.contarEmpresas(ctx.tenantId) >= limiteEmpresas) {
+        throw new HttpError(403, 'limite_empresas', `Seu plano permite até ${limiteEmpresas} CNPJs. Fale conosco para ampliar o limite.`);
+      }
       try {
         const nova = db.criarEmpresa({
           tenantId: ctx.tenantId,
@@ -312,91 +364,91 @@ export function criarApp(config, db) {
       return responder(res, 200, emp);
     }
 
-    // --- Dashboard da Empresa (DEVE vir antes da rota genérica /empresas/:cnpj) ---
-    const mDashboard = /^\/empresas\/([\d]{14})\/dashboard$/.exec(pathname);
+    // --- Análises salvas por empresa (só totais) e dashboard ---
+    const mAnalises = /^\/empresas\/(\d{14})\/analises$/.exec(pathname);
+    if (metodo === 'POST' && mAnalises) {
+      const cnpj = mAnalises[1];
+      if (!db.obterEmpresa(ctx.tenantId, cnpj)) throw new HttpError(404, 'empresa_nao_encontrada', 'Empresa não encontrada');
+      const b = await lerJson(req, 5_000);
+      const num = (v, nome, opcional = false) => {
+        if (opcional && (v === null || v === undefined)) return null;
+        if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > 1e13) throw new HttpError(400, 'analise_invalida', `Valor inválido em ${nome}`);
+        return Math.round(v * 100) / 100;
+      };
+      const inteiro = (v, nome) => { if (!Number.isInteger(v) || v < 0 || v > 1e7) throw new HttpError(400, 'analise_invalida', `Valor inválido em ${nome}`); return v; };
+      if (!['simulacao', 'lote'].includes(b.origem)) throw new HttpError(400, 'analise_invalida', 'origem deve ser simulacao ou lote');
+      if (!['regime-normal', 'simples-nacional'].includes(b.regime)) throw new HttpError(400, 'analise_invalida', 'regime inválido');
+      const id = db.registrarAnalise(ctx.tenantId, cnpj, {
+        origem: b.origem, regime: b.regime,
+        documentos: inteiro(b.documentos, 'documentos'), itens: inteiro(b.itens, 'itens'), itens_com_problema: inteiro(b.itensComProblema, 'itensComProblema'),
+        base: num(b.base, 'base'), cbs: num(b.cbs, 'cbs'), ibs: num(b.ibs, 'ibs'), imposto_seletivo: num(b.impostoSeletivo ?? 0, 'impostoSeletivo'), total: num(b.total, 'total'),
+        tributos_atuais: num(b.tributosAtuais, 'tributosAtuais', true), cbs_ibs_comparavel: num(b.cbsIbsComparavel, 'cbsIbsComparavel', true),
+      });
+      return responder(res, 201, { salva: true, id });
+    }
+
+    const mApagar = /^\/empresas\/(\d{14})\/analises\/(\d+)$/.exec(pathname);
+    if (metodo === 'DELETE' && mApagar) {
+      if (!db.removerAnalise(ctx.tenantId, mApagar[1], Number(mApagar[2]))) throw new HttpError(404, 'analise_nao_encontrada', 'Análise não encontrada');
+      return responder(res, 200, { removida: true });
+    }
+
+    const mDashboard = /^\/empresas\/(\d{14})\/dashboard$/.exec(pathname);
     if (metodo === 'GET' && mDashboard) {
       const cnpj = mDashboard[1];
-      const emp = db.obterEmpresa(ctx.tenantId, cnpj);
-      if (!emp) throw new HttpError(404, 'empresa_nao_encontrada', 'Empresa não encontrada');
-
-      // Buscar dados de uso para KPIs
+      if (!db.obterEmpresa(ctx.tenantId, cnpj)) throw new HttpError(404, 'empresa_nao_encontrada', 'Empresa não encontrada');
+      const agora = new Date();
+      const inicio = new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth() - 5, 1));
+      const analises = db.analisesDesde(ctx.tenantId, cnpj, inicio.toISOString());
+      const soma = (lista, campo) => Math.round(lista.reduce((a, x) => a + (x[campo] || 0), 0) * 100) / 100;
+      const comparaveis = analises.filter((x) => x.tributos_atuais !== null && x.cbs_ibs_comparavel !== null);
+      const base = soma(analises, 'base'); const cbsIbs = soma(analises, 'cbs') + soma(analises, 'ibs');
+      const atual = soma(comparaveis, 'tributos_atuais'); const novo = soma(comparaveis, 'cbs_ibs_comparavel');
+      const baseComp = comparaveis.length ? soma(comparaveis.map((x) => ({ b: x.base })), 'b') : 0;
+      const pct = (v, b) => (b > 0 ? Math.round((v / b) * 10000) / 100 : null);
+      const meses = []; const rotulos = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+      for (let i = 0; i < 6; i++) { const d = new Date(Date.UTC(inicio.getUTCFullYear(), inicio.getUTCMonth() + i, 1)); meses.push({ chave: d.toISOString().slice(0, 7), rotulo: rotulos[d.getUTCMonth()] }); }
+      const porMes = (filtro, valor) => meses.map((m) => Math.round(analises.filter((x) => x.criado_em.slice(0, 7) === m.chave && filtro(x)).reduce((a, x) => a + valor(x), 0) * 100) / 100);
+      const comProblema = analises.reduce((a, x) => a + x.itens_com_problema, 0);
+      const ultima = analises[0];
+      const t = db.tenantPorId(ctx.tenantId);
       const desde = inicioDoMes();
-      const tenant = db.tenantPorId(ctx.tenantId);
-      const usoCalculo = db.contarUso(ctx.tenantId, 'calculo', desde);
-      const usoDanfse = db.contarUso(ctx.tenantId, 'danfse', desde);
-      const limiteCalculo = limiteDoPlano(tenant.plano, 'calculo');
-      const limiteDanfse = limiteDoPlano(tenant.plano, 'danfse');
-
-      // Histórico recente (últimas 50 simulações desta empresa)
-      const historico = db.historico(ctx.tenantId, 50);
-      const simsEmpresa = historico.filter(h => h.operacaoId?.includes?.(cnpj) || h.recurso === 'calculo');
-
-      // Calcular totais aproximados das últimas simulações
-      let totalCBS = 0, totalIBS = 0, totalIS = 0, totalGeral = 0, qtdNotas = 0;
-      let comDivergencia = 0;
-
-      for (const ev of simsEmpresa.slice(0, 20)) {
-        if (ev.payload) {
-          try {
-            const p = JSON.parse(ev.payload);
-            // Tentar extrair totais do payload se for resultado de simulação
-            if (p.totais) {
-              totalCBS += p.totais.cbs || 0;
-              totalIBS += p.totais.ibs || 0;
-              totalIS += p.totais.impostoSeletivo || 0;
-              totalGeral += p.totais.total || 0;
-              qtdNotas++;
-            }
-            if (p.itens) {
-              for (const item of p.itens) {
-                if (item.situacao === 'erro' || (item.mensagens && item.mensagens.length > 0)) {
-                  comDivergencia++;
-                }
-              }
-            }
-          } catch { /* ignorar */ }
-        }
-      }
-
-      // Dados para gráfico comparativo (simulado baseado no regime da empresa)
-      const regime = emp.regime_atual;
-      const labels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-      const mesAtual = new Date().getMonth();
-
-      // Gerar dados simulados para o gráfico (em produção viriam de cálculos reais)
-      const gerarDadosGrafico = (base, variacao) => {
-        return labels.map((_, i) => {
-          const fator = i <= mesAtual ? 1 : 0;
-          const ruido = (Math.random() - 0.5) * 0.1;
-          return Math.round(base * (1 + variacao + ruido) * fator * 100) / 100;
-        });
-      };
-
-      const baseMensal = totalGeral / Math.max(qtdNotas, 1) * 10 || 45000; // estimativa
-      const projecaoSimples = baseMensal * 1.07; // ~7% no Simples Novo
-      const projecaoRegular = baseMensal * 1.09; // ~9% no Regular Novo
-
-      const dashboard = {
-        faturamentoAnalisado: { valor: Math.round(baseMensal * qtdNotas), qtdNotas: Math.max(qtdNotas, 120) },
-        cargaAtual: { valor: Math.round(totalGeral), percentual: qtdNotas > 0 ? 6.0 : 0 },
-        projecaoReforma: { valor: Math.round(projecaoSimples), percentual: 7.0 },
-        diferenca: { valor: Math.round(projecaoSimples - totalGeral), tipo: 'aumento' },
-        alertas: comDivergencia > 0 ? [{ tipo: 'divergencia_ncm', qtd: comDivergencia, mensagem: `${comDivergencia} itens nas notas enviadas possuem NCM/CST com divergência na regra da Reforma.` }] : [],
-        grafico: {
-          labels: labels.slice(0, mesAtual + 1),
-          datasets: [
-            { label: 'Cenário Atual', data: gerarDadosGrafico(baseMensal / 12, 0).slice(0, mesAtual + 1), backgroundColor: '#5f7084' },
-            { label: 'Simples Nacional (Novo)', data: gerarDadosGrafico(projecaoSimples / 12, 0.07).slice(0, mesAtual + 1), backgroundColor: '#0d9488' },
-            { label: 'Regime Regular (Novo)', data: gerarDadosGrafico(projecaoRegular / 12, 0.09).slice(0, mesAtual + 1), backgroundColor: '#3976bd' }
-          ]
-        },
+      return responder(res, 200, {
+        periodo: { desde: inicio.toISOString().slice(0, 10), meses: meses.length },
+        vazio: analises.length === 0,
+        analises: analises.length,
+        faturamentoAnalisado: { valor: base, qtdNotas: analises.reduce((a, x) => a + x.documentos, 0) },
+        cargaAtual: { valor: atual, percentual: pct(atual, baseComp), analises: comparaveis.length },
+        projecaoReforma: { valor: Math.round(cbsIbs * 100) / 100, percentual: pct(cbsIbs, base) },
+        diferenca: { valor: comparaveis.length ? Math.round((novo - atual) * 100) / 100 : null, tipo: novo >= atual ? 'aumento' : 'reducao', comparavel: comparaveis.length > 0 },
+        alertas: comProblema > 0 ? [{ tipo: 'itens_com_problema', qtd: comProblema, mensagem: `${comProblema} item(ns) das análises do período tiveram problema na calculadora. Abra a Auditoria para corrigir.` }] : [],
+        grafico: { labels: meses.map((m) => m.rotulo), series: [
+          { nome: 'Tributos atuais (informados)', cor: '#5f7084', valores: porMes((x) => x.tributos_atuais !== null, (x) => x.tributos_atuais) },
+          { nome: 'CBS + IBS (regime normal)', cor: '#3976bd', valores: porMes((x) => x.regime === 'regime-normal', (x) => x.cbs + x.ibs) },
+          { nome: 'CBS + IBS (Simples Nacional)', cor: '#0d9488', valores: porMes((x) => x.regime === 'simples-nacional', (x) => x.cbs + x.ibs) },
+        ] },
+        ultimaAnalise: ultima ? { em: ultima.criado_em, origem: ultima.origem, regime: ultima.regime, documentos: ultima.documentos } : null,
         uso: {
-          calculo: { usado: usoCalculo, limite: limiteCalculo },
-          danfse: { usado: usoDanfse, limite: limiteDanfse }
-        }
-      };
+          calculo: { usado: db.contarUso(ctx.tenantId, 'calculo', desde), limite: limiteDoPlano(t.plano, 'calculo') },
+          danfse: { usado: db.contarUso(ctx.tenantId, 'danfse', desde), limite: limiteDoPlano(t.plano, 'danfse') },
+        },
+      });
+    }
 
-      return responder(res, 200, dashboard);
+    // --- Dados do escritório (saem nos relatórios) ---
+    if (pathname === '/me/escritorio') {
+      if (metodo === 'GET') return responder(res, 200, db.obterEscritorio(ctx.tenantId) || {});
+      if (metodo === 'PUT') {
+        if (ctx.via !== 'sessao') throw new HttpError(403, 'proibido', 'Altere os dados do escritório com login, não com chave de API');
+        const b = await lerJson(req, 400_000);
+        const texto = (v, max) => { if (v === undefined || v === null || v === '') return null; if (typeof v !== 'string' || v.length > max) throw new HttpError(400, 'dado_invalido', 'Texto inválido ou longo demais'); return v.trim(); };
+        const cor = texto(b.cor, 7);
+        if (cor && !/^#[0-9a-fA-F]{6}$/.test(cor)) throw new HttpError(400, 'dado_invalido', 'Cor inválida');
+        const logo = texto(b.logo, 300_000);
+        if (logo && !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(logo)) throw new HttpError(400, 'dado_invalido', 'Logotipo deve ser PNG, JPG ou WebP');
+        db.gravarEscritorio(ctx.tenantId, { nome: texto(b.nome, 80), responsavel: texto(b.responsavel, 80), crc: texto(b.crc, 30), contato: texto(b.contato, 120), cor, logo });
+        return responder(res, 200, db.obterEscritorio(ctx.tenantId));
+      }
     }
 
     if (metodo === 'GET' && pathname === '/usage') {
@@ -406,6 +458,7 @@ export function criarApp(config, db) {
       for (const recurso of ['calculo', 'danfse']) {
         uso[recurso] = { usado: db.contarUso(ctx.tenantId, recurso, desde), limite: limiteDoPlano(t.plano, recurso) };
       }
+      uso.empresas = { usado: db.contarEmpresas(ctx.tenantId), limite: limiteDoPlano(t.plano, 'empresas') };
       return responder(res, 200, { plano: t.plano, desde, uso });
     }
 

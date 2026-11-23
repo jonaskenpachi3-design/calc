@@ -1,243 +1,108 @@
 /**
- * Nexo Fiscal — Dashboard Component
- * ==========================================================================
- * Dashboard executivo com KPIs, gráfico comparativo e alertas.
+ * Nexo Fiscal — Dashboard
+ * Números reais das análises salvas (só totais). Sem dados inventados e sem biblioteca externa:
+ * o gráfico é feito com barras CSS. Todo texto vindo do servidor entra por textContent (el()).
  */
 
-import { el, limpar, kpi, dinheiro, aviso, formatCNPJ } from '../utils.js';
+import { el, limpar, dinheiro, formatCNPJ } from '../utils.js';
+
+const REGIMES = { 'simples-nacional': 'Simples Nacional', 'lucro-presumido': 'Lucro Presumido', 'lucro-real': 'Lucro Real', 'regime-normal': 'Regime Normal' };
+const pctTxt = (v) => (v === null || v === undefined ? '' : `${v.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`);
 
 export class Dashboard {
   constructor(state, api, router) {
-    this.state = state;
-    this.api = api;
-    this.router = router;
-    this.chart = null;
+    this.state = state; this.api = api; this.router = router;
   }
 
   render() {
     const empresa = this.state.empresaAtiva;
     const div = el('div', { id: 'aba-dashboard' });
-    div.innerHTML = `
-      <div class="page-head">
-        <div class="eyebrow">Centro de controle</div>
-        <h1>Dashboard — ${empresa?.razao_social || 'Empresa'}</h1>
-        <p>Acompanhe o impacto da Reforma Tributária no seu faturamento.</p>
-      </div>
-
-      <div class="stats" id="kpi-cards"></div>
-
-      <div class="two">
-        <div class="card">
-          <h2>Comparativo de Cenários</h2>
-          <div style="position: relative; height: 320px;">
-            <canvas id="grafico-comparativo"></canvas>
-          </div>
-        </div>
-        <div class="card">
-          <h2>Alertas</h2>
-          <div id="alertas-container"></div>
-          <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--bd);">
-            <h3>Uso do Plano</h3>
-            <div class="grid" id="uso-plano"></div>
-          </div>
-        </div>
-      </div>
-
-      <div class="two" style="margin-top: 16px;">
-        <div class="card">
-          <h2>Empresa Selecionada</h2>
-          <div class="grid" style="margin-top: 12px;">
-            <div><strong>Razão Social:</strong> ${empresa?.razao_social || '—'}</div>
-            <div><strong>CNPJ:</strong> ${formatCNPJ(empresa?.cnpj)}</div>
-            <div><strong>Regime:</strong> ${this.formatRegime(empresa?.regime_atual)}</div>
-            <div><strong>CNAE Principal:</strong> ${empresa?.cnae_principal || 'Não informado'}</div>
-          </div>
-          <div class="row" style="margin-top: 16px;">
-            <button class="sec" id="trocar-empresa-dash">Trocar de Empresa</button>
-          </div>
-        </div>
-        <div class="card">
-          <h2>Ações Rápidas</h2>
-          <div class="actions">
-            <button data-ir="simular" class="sec">＋ Nova Simulação</button>
-            <button data-ir="lote" class="sec">⇧ Simulador em Lote</button>
-            <button data-ir="danfse" class="sec">▧ Central DANFSe</button>
-            <button data-ir="configuracoes" class="sec">⚙ Configurações</button>
-          </div>
-        </div>
-      </div>
-    `;
+    div.append(
+      el('div', { class: 'page-head' },
+        el('div', { class: 'eyebrow' }, 'Visão geral'),
+        el('h1', {}, empresa?.razao_social || 'Empresa'),
+        el('p', {}, `CNPJ ${formatCNPJ(empresa?.cnpj)} · ${REGIMES[empresa?.regime_atual] || empresa?.regime_atual || ''}`)),
+      el('div', { id: 'dash-alerta' }),
+      el('div', { class: 'stats', id: 'kpi-cards' }),
+      el('div', { class: 'two' },
+        el('div', { class: 'card' }, el('h2', {}, 'Comparativo por mês'), el('div', { id: 'grafico' })),
+        el('div', { class: 'card' },
+          el('h2', {}, 'Próximos passos'),
+          el('div', { class: 'actions' },
+            this.acao('simular', '＋ Nova simulação'), this.acao('lote', '⇧ Simulador em lote'),
+            this.acao('relatorio', '▤ Relatório'), this.acao('danfse', '▧ Central DANFSe')),
+          el('div', { style: 'margin-top:16px;padding-top:16px;border-top:1px solid var(--bd)' },
+            el('h3', {}, 'Uso do plano neste mês'), el('div', { class: 'grid', id: 'uso-plano' })),
+          el('div', { class: 'row', style: 'margin-top:16px' },
+            el('button', { class: 'sec', id: 'trocar-empresa-dash' }, 'Trocar de empresa')))));
     return div;
   }
 
+  acao(aba, texto) { return el('button', { class: 'sec', 'data-ir': aba }, texto); }
+
   async mount() {
-    await this.carregarDashboard();
-
-    document.getElementById('trocar-empresa-dash')?.addEventListener('click', () => {
-      this.state.setEmpresaAtiva(null);
-      this.router.navigate('dashboard');
-    });
-
-    document.querySelectorAll('[data-ir]').forEach(btn => {
-      btn.addEventListener('click', () => this.router.navigate(btn.dataset.ir));
-    });
-  }
-
-  async carregarDashboard() {
+    document.getElementById('trocar-empresa-dash')?.addEventListener('click', () => { this.state.setEmpresaAtiva(null); this.router.navigate('dashboard'); });
+    document.querySelectorAll('[data-ir]').forEach((b) => b.addEventListener('click', () => this.router.navigate(b.dataset.ir)));
     const empresa = this.state.empresaAtiva;
     if (!empresa) return;
-
     try {
-      const data = await this.api.get(`/empresas/${empresa.cnpj}/dashboard`);
-      this.renderKPIs(data);
-      this.renderGrafico(data.grafico);
-      this.renderAlertas(data.alertas);
-      this.renderUsoPlano(data.uso);
+      const d = await this.api.get(`/empresas/${empresa.cnpj}/dashboard`);
+      this.kpis(d); this.alertas(d); this.grafico(d); this.uso(d.uso);
     } catch (e) {
-      console.error('Erro ao carregar dashboard:', e);
-      aviso('kpi-cards', 'Erro ao carregar dados do dashboard. Tente recarregar a página.', 'err');
+      const c = document.getElementById('kpi-cards');
+      if (c) c.append(el('div', { class: 'msg err' }, 'Não foi possível carregar a visão geral. Tente recarregar a página.'));
     }
   }
 
-  renderKPIs(data) {
-    const container = document.getElementById('kpi-cards');
-    limpar(container);
-
-    const f = data.faturamentoAnalisado;
-    const c = data.cargaAtual;
-    const p = data.projecaoReforma;
-    const d = data.diferenca;
-
-    container.append(
-      kpi('Faturamento Analisado', f.valor, false),
-      kpi('Carga Tributária Atual', c.valor, false),
-      kpi('Projeção Reforma (CBS+IBS)', p.valor, false),
-      kpi('Diferença Estimada', d.valor, true)
-    );
-
-    // Adicionar detalhes nos KPIs
-    const cards = container.querySelectorAll('.kpi');
-    if (cards[0]) cards[0].querySelector('.l').textContent = `Faturamento Analisado (${f.qtdNotas.toLocaleString('pt-BR')} notas)`;
-    if (cards[1]) cards[1].querySelector('.l').textContent = `Carga Tributária Atual (${c.percentual}%)`;
-    if (cards[2]) cards[2].querySelector('.l').textContent = `Projeção Reforma (${p.percentual}%)`;
-    if (cards[3]) {
-      const isAumento = d.tipo === 'aumento';
-      cards[3].querySelector('.l').textContent = isAumento ? 'Aumento Estimado' : 'Economia Estimada';
-      cards[3].querySelector('.v').style.color = isAumento ? 'var(--red)' : 'var(--green)';
-    }
+  kpis(d) {
+    const c = document.getElementById('kpi-cards'); if (!c) return; limpar(c);
+    const card = (rotulo, valor, detalhe, cor) => el('div', { class: 'kpi' },
+      el('div', { class: 'v', style: cor ? `color:${cor}` : null }, valor),
+      el('div', { class: 'l' }, rotulo), detalhe ? el('div', { class: 'hint' }, detalhe) : null);
+    const dif = d.diferenca;
+    c.append(
+      card('Faturamento analisado', dinheiro(d.faturamentoAnalisado.valor), d.vazio ? 'nenhuma análise ainda' : `${d.faturamentoAnalisado.qtdNotas.toLocaleString('pt-BR')} documento(s)`),
+      card('Carga atual', d.cargaAtual.analises ? dinheiro(d.cargaAtual.valor) : '—', d.cargaAtual.analises ? `${pctTxt(d.cargaAtual.percentual)} · valores informados nos XML/CSV` : 'precisa de tributos atuais informados'),
+      card('Projeção CBS + IBS', d.vazio ? '—' : dinheiro(d.projecaoReforma.valor), d.vazio ? '' : pctTxt(d.projecaoReforma.percentual)),
+      card(dif.comparavel ? (dif.tipo === 'aumento' ? 'Aumento estimado' : 'Economia estimada') : 'Diferença', dif.comparavel ? dinheiro(Math.abs(dif.valor)) : '—',
+        dif.comparavel ? 'bruto, sem créditos' : 'sem análise comparável', dif.comparavel ? (dif.tipo === 'aumento' ? 'var(--red)' : 'var(--green)') : null));
   }
 
-  renderGrafico(graficoData) {
-    const ctx = document.getElementById('grafico-comparativo');
-    if (!ctx || !graficoData) return;
+  alertas(d) {
+    const c = document.getElementById('dash-alerta'); if (!c) return; limpar(c);
+    for (const a of d.alertas) c.append(el('div', { class: 'msg warn' }, a.mensagem));
+    if (d.vazio) c.append(el('div', { class: 'msg' }, 'Ainda não há análises desta empresa. Faça uma simulação ou envie um lote para preencher esta tela.'));
+  }
 
-    // Destruir gráfico anterior se existir
-    if (this.chart) {
-      this.chart.destroy();
-    }
-
-    // Chart.js global (carregado via CDN no index.html)
-    const Chart = window.Chart;
-    if (!Chart) {
-      console.warn('Chart.js não carregado');
-      return;
-    }
-
-    this.chart = new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels: graficoData.labels,
-        datasets: graficoData.datasets.map(ds => ({
-          label: ds.label,
-          data: ds.data,
-          backgroundColor: ds.backgroundColor,
-          borderRadius: 6,
-          borderSkipped: false
-        }))
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: { mode: 'index', intersect: false },
-        plugins: {
-          legend: { position: 'top', labels: { usePointStyle: true, padding: 16 } },
-          tooltip: {
-            callbacks: {
-              label: (ctx) => `${ctx.dataset.label}: ${this.formatCurrency(ctx.parsed.y)}`
-            }
-          }
-        },
-        scales: {
-          y: {
-            beginAtZero: true,
-            ticks: { callback: (v) => this.formatCurrency(v) },
-            grid: { color: 'var(--bd)' }
-          },
-          x: { grid: { display: false } }
-        }
-      }
+  grafico(d) {
+    const c = document.getElementById('grafico'); if (!c) return; limpar(c);
+    const { labels, series } = d.grafico;
+    const max = Math.max(1, ...series.flatMap((s) => s.valores));
+    const leg = el('div', { class: 'row', style: 'gap:14px;flex-wrap:wrap;margin-bottom:10px' },
+      series.map((s) => el('span', { class: 'hint' }, el('i', { style: `display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;background:${s.cor}` }), s.nome)));
+    const area = el('div', { style: 'display:flex;gap:10px;align-items:flex-end;height:240px;border-bottom:1px solid var(--bd)' });
+    labels.forEach((rot, i) => {
+      const grupo = el('div', { style: 'flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%' },
+        el('div', { style: 'display:flex;gap:3px;align-items:flex-end;height:100%;width:100%;justify-content:center' },
+          series.map((s) => el('div', { title: `${s.nome}: ${dinheiro(s.valores[i])}`, style: `width:22%;max-width:26px;min-height:${s.valores[i] > 0 ? 2 : 0}px;height:${(s.valores[i] / max) * 100}%;background:${s.cor};border-radius:4px 4px 0 0` }))));
+      area.append(grupo);
     });
+    const eixo = el('div', { style: 'display:flex;gap:10px;margin-top:6px' }, labels.map((r) => el('div', { class: 'hint', style: 'flex:1;text-align:center' }, r)));
+    c.append(leg, area, eixo);
+    if (d.vazio) c.append(el('p', { class: 'hint', style: 'margin-top:10px' }, 'Sem dados no período.'));
   }
 
-  renderAlertas(alertas) {
-    const container = document.getElementById('alertas-container');
-    limpar(container);
-
-    if (!alertas || alertas.length === 0) {
-      container.append(el('div', { class: 'msg ok' }, '✓ Nenhum alerta no momento. Todas as simulações recentes estão consistentes.'));
-      return;
-    }
-
-    for (const alerta of alertas) {
-      container.append(el('div', { class: 'msg warn' },
-        el('strong', {}, alerta.mensagem || 'Atenção necessária'),
-        alerta.qtd ? el('br') + ` ${alerta.qtd} item(ns) afetado(s)` : ''
-      ));
+  uso(uso) {
+    const c = document.getElementById('uso-plano'); if (!c || !uso) return; limpar(c);
+    const nomes = { calculo: 'Simulações', danfse: 'PDFs DANFSe' };
+    for (const [rec, v] of Object.entries(uso)) {
+      const pct = v.limite === null ? 0 : Math.min(100, (v.usado / v.limite) * 100);
+      c.append(el('div', {},
+        el('div', { style: 'display:flex;justify-content:space-between;margin-bottom:4px' },
+          el('span', {}, nomes[rec] || rec), el('strong', {}, `${v.usado.toLocaleString('pt-BR')}${v.limite === null ? ' (sem limite)' : ' / ' + v.limite.toLocaleString('pt-BR')}`)),
+        el('div', { class: 'bar' }, el('i', { style: `width:${pct}%;background:${pct > 80 ? 'var(--red)' : pct > 60 ? 'var(--amber)' : 'var(--teal)'}` }))));
     }
   }
 
-  renderUsoPlano(uso) {
-    const container = document.getElementById('uso-plano');
-    limpar(container);
-
-    if (!uso) return;
-
-    for (const [recurso, dados] of Object.entries(uso)) {
-      const usado = dados.usado || 0;
-      const limite = dados.limite;
-      const pct = limite === null ? 0 : Math.min(100, (usado / limite) * 100);
-      const label = recurso === 'calculo' ? 'Simulações' : 'PDFs DANFSe';
-
-      container.append(el('div', {},
-        el('div', { style: 'display: flex; justify-content: space-between; margin-bottom: 4px;' },
-          el('span', {}, `${label} neste mês`),
-          el('strong', {}, `${usado.toLocaleString('pt-BR')} ${limite === null ? '' : '/ ' + limite.toLocaleString('pt-BR')}`)
-        ),
-        el('div', { class: 'bar' },
-          el('i', { style: `width:${pct}%; background: ${pct > 80 ? 'var(--red)' : pct > 60 ? 'var(--amber)' : 'var(--teal)'}` })
-        )
-      ));
-    }
-  }
-
-  formatCurrency(val) {
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0 }).format(val);
-  }
-
-  formatRegime(regime) {
-    const map = {
-      'simples-nacional': 'Simples Nacional',
-      'lucro-presumido': 'Lucro Presumido',
-      'lucro-real': 'Lucro Real',
-      'regime-normal': 'Regime Normal'
-    };
-    return map[regime] || regime;
-  }
-
-  unmount() {
-    if (this.chart) {
-      this.chart.destroy();
-      this.chart = null;
-    }
-  }
+  unmount() {}
 }

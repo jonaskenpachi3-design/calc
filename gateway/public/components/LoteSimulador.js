@@ -1,481 +1,181 @@
 /**
- * Nexo Fiscal — LoteSimulador Component
- * ==========================================================================
- * Simulador em Lote Avançado: DropZone multi-formato (XML/ZIP/CSV),
- * cenários comparativos, progress bar real com polling, redirecionamento automático.
+ * Nexo Fiscal — Simulador em lote
+ * Arraste XML (NF-e, NFC-e, NFS-e), ZIP de XMLs ou a planilha CSV. Tudo é lido no navegador; só os dados
+ * de cada operação seguem para a calculadora oficial, em partes, e nada é guardado no servidor além dos totais.
  */
+import { el, limpar, aviso, campo, dinheiro, downloadBlob } from '../utils.js';
+import { lote, reiniciarLote, depsDoLote, temLote } from '../lote-store.js';
+import { lerArquivos, modeloCsv, processar, totais, gruposSimples, atividadesDe, comparativoRegimes, comparativoAtual, MAX_OPERACOES } from '../lote-engine.js';
+import { salvarLote } from '../lote-salvar.js';
 
-import { el, limpar, aviso, campo, dinheiro, formatCNPJ, toast, debounce, criarModal, spinner, parseCSV, gerarCSV } from '../utils.js';
+const NOME_REGIME = { 'regime-normal': 'Regime normal', 'simples-nacional': 'Simples Nacional' };
 
 export class LoteSimulador {
-  constructor(state, api, router) {
-    this.state = state;
-    this.api = api;
-    this.router = router;
-    this.arquivos = [];
-    this.jobId = null;
-    this.pollInterval = null;
-    this.cenarios = ['regime-atual'];
-    this.etapaAtual = '';
-  }
+  constructor(state, api, router) { this.state = state; this.api = api; this.router = router; }
 
   render() {
     const empresa = this.state.empresaAtiva;
     const div = el('div', { id: 'aba-lote' });
-    div.innerHTML = `
-      <div class="page-head">
-        <div class="eyebrow">Processamento em Lote</div>
-        <h1>Simulador em Lote Avançado</h1>
-        <p>Suba arquivos XML (NF-e/NFS-e), ZIP ou CSV e veja o comparativo de CBS e IBS por cenário.</p>
-      </div>
-
-      ${this.jobId ? this.renderProgresso() : this.renderFormulario(empresa)}
-    `;
+    div.append(
+      el('div', { class: 'page-head' }, el('div', { class: 'eyebrow' }, 'Processamento em lote'), el('h1', {}, 'Simulador em lote'),
+        el('p', {}, `Envie as notas de ${empresa?.razao_social || 'a empresa'} e veja a CBS e o IBS de cada uma, com comparativo.`)),
+      el('div', { class: 'card' }, el('h2', {}, '1. Arquivos'),
+        el('div', { class: 'drop', id: 'drop' },
+          el('h3', {}, 'Arraste aqui ou escolha os arquivos'),
+          el('p', { class: 'mut' }, 'XML de NF-e, NFC-e e NFS-e · ZIP com vários XML · planilha CSV'),
+          el('p', { class: 'mut small' }, `Até ${MAX_OPERACOES} notas por lote. Os arquivos são lidos neste computador e não ficam guardados.`),
+          el('input', { type: 'file', id: 'arquivo', multiple: true, accept: '.xml,.zip,.csv', hidden: true }),
+          el('div', { class: 'row', style: 'justify-content:center' },
+            el('button', { id: 'escolher' }, 'Escolher arquivos'),
+            el('button', { class: 'sec', id: 'modelo-normal' }, '⇩ Modelo CSV (regime normal)'),
+            el('button', { class: 'sec', id: 'modelo-simples' }, '⇩ Modelo CSV (Simples)'))),
+        el('div', { id: 'lote-msg', role: 'alert' }), el('div', { id: 'previa' })),
+      el('div', { class: 'card', id: 'cenarios', hidden: true }),
+      el('div', { class: 'card', id: 'processar', hidden: true }),
+      el('div', { id: 'concluido' }));
     return div;
   }
 
-  renderFormulario(empresa) {
-    return `
-      <div class="card" id="drop-zone-container">
-        <h2>1. Selecione os arquivos</h2>
-        <div class="drop" id="drop-zone">
-          <div style="font-size: 48px; margin-bottom: 8px;">📁</div>
-          <h3>Arraste arquivos aqui ou clique para selecionar</h3>
-          <p class="mut">Suporta: <strong>.xml</strong> (NF-e/NFS-e), <strong>.zip</strong> (múltiplos XMLs), <strong>.csv</strong> (modelo)</p>
-          <p class="mut small">Máximo 500 notas • 50MB por arquivo</p>
-          <input type="file" id="file-input" multiple accept=".xml,.zip,.csv" style="display: none;">
-          <div class="row" style="margin-top: 16px; justify-content: center; gap: 12px;">
-            <button class="sec" id="btn-selecionar">Selecionar Arquivos</button>
-            <button class="sec" id="btn-baixar-modelo">⬇ Baixar Modelo CSV</button>
-          </div>
-        </div>
-        <div id="arquivos-selecionados" style="margin-top: 16px;"></div>
-      </div>
-
-      <div class="card" id="cenarios-container" hidden>
-        <h2>2. Cenários de Simulação</h2>
-        <div class="choice" id="escolha-cenarios">
-          <button data-cenario="regime-atual" aria-pressed="true"><span><strong>Regime Atual da Empresa</strong><span class="mut small">${this.formatRegime(empresa?.regime_atual)}</span></span></button>
-          <button data-cenario="regime-alternativo" aria-pressed="false"><span><strong>Regime Alternativo (Comparativo)</strong><span class="mut small">Lucro Presumido + Simples Nacional</span></span></button>
-        </div>
-        <p class="mut small" style="margin-top: 8px;">O regime atual será sempre simulado. O alternativo roda ambos os regimes para comparação.</p>
-      </div>
-
-      <div class="card" id="processar-container" hidden>
-        <h2>3. Processar</h2>
-        <div id="lote-msg" role="alert"></div>
-        <div class="row" style="justify-content: flex-end; gap: 12px;">
-          <button class="sec" id="btn-limpar">Limpar</button>
-          <button id="btn-processar" style="min-width: 200px;">Processar Lote</button>
-        </div>
-      </div>
-    `;
+  async mount() {
+    const cnpj = this.state.empresaAtiva?.cnpj;
+    if (lote.cnpj && lote.cnpj !== cnpj) reiniciarLote();
+    document.getElementById('escolher').onclick = () => document.getElementById('arquivo').click();
+    document.getElementById('arquivo').onchange = (e) => this.receber([...e.target.files]);
+    document.getElementById('modelo-normal').onclick = () => downloadBlob(new Blob([modeloCsv('regime-normal')], { type: 'text/csv;charset=utf-8' }), 'modelo-lote-regime-normal.csv');
+    document.getElementById('modelo-simples').onclick = () => downloadBlob(new Blob([modeloCsv('simples-nacional')], { type: 'text/csv;charset=utf-8' }), 'modelo-lote-simples.csv');
+    const z = document.getElementById('drop');
+    ['dragenter', 'dragover'].forEach((ev) => z.addEventListener(ev, (e) => { e.preventDefault(); z.classList.add('over'); }));
+    ['dragleave', 'drop'].forEach((ev) => z.addEventListener(ev, (e) => { e.preventDefault(); z.classList.remove('over'); }));
+    z.addEventListener('drop', (e) => this.receber([...e.dataTransfer.files]));
+    if (temLote()) this.mostrarConcluido(); else if (lote.grupos.length) this.mostrarPrevia();
   }
 
-  renderProgresso() {
-    return `
-      <div class="card" style="margin-bottom: 20px;">
-        <div class="page-head" style="margin-bottom: 0;">
-          <div class="eyebrow">Processando</div>
-          <h1>Simulador em Lote — Progresso</h1>
-          <p>Job ID: <code style="font-size: 13px;">${this.jobId.slice(0, 8)}...</code></p>
-        </div>
-      </div>
+  regimeCsv() { return this.state.empresaAtiva?.regime_atual === 'simples-nacional' ? 'simples-nacional' : 'regime-normal'; }
 
-      <div class="card">
-        <div class="bar-wrap">
-          <i id="progress-bar" style="width: 0%;"></i>
-        </div>
-        <div class="row" style="justify-content: space-between; margin-top: 8px;">
-          <span id="progress-text">Iniciando...</span>
-          <span id="progress-count" class="mut">0 / 0 notas</span>
-        </div>
-        <div class="mut small" id="progress-etapa" style="margin-top: 8px;">Aguardando worker...</div>
-
-        <div id="progress-detalhes" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--bd);">
-          <h3>Detalhes</h3>
-          <div class="grid" style="margin-top: 12px;">
-            <div><strong>Total de notas:</strong> <span id="det-total">—</span></div>
-            <div><strong>Processadas:</strong> <span id="det-processadas">0</span></div>
-            <div><strong>Com erro:</strong> <span id="det-erros">0</span></div>
-            <div><strong>Tempo estimado:</strong> <span id="det-tempo">—</span></div>
-          </div>
-        </div>
-
-        <div class="row" style="margin-top: 20px; justify-content: flex-end; gap: 12px;">
-          <button class="sec" id="btn-cancelar">Cancelar</button>
-          <button id="btn-ver-resultados" hidden>Ver Resultados</button>
-        </div>
-      </div>
-    `;
+  async receber(arquivos) {
+    if (!arquivos.length) return;
+    reiniciarLote(); limpar(document.getElementById('previa')); limpar(document.getElementById('concluido'));
+    document.getElementById('cenarios').hidden = true; document.getElementById('processar').hidden = true;
+    aviso('lote-msg', 'Lendo os arquivos…', 'warn');
+    try {
+      const deps = await depsDoLote(this.api);
+      const r = await lerArquivos(arquivos, this.regimeCsv(), deps);
+      Object.assign(lote, { grupos: r.grupos, problemas: r.problemas, regime: r.regime, formato: r.formato, cnpj: this.state.empresaAtiva?.cnpj });
+      aviso('lote-msg'); this.mostrarPrevia();
+    } catch (e) { aviso('lote-msg', e.message, 'err'); }
   }
 
-  mount() {
-    if (this.jobId) {
-      this.iniciarPolling();
-      this.bindProgressoEvents();
-    } else {
-      this.bindFormularioEvents();
-    }
+  mostrarPrevia() {
+    const p = document.getElementById('previa'); limpar(p);
+    const n = lote.grupos.length;
+    p.append(el('div', { class: n ? 'msg ok' : 'msg err' }, n ? `${n} operação(ões) lida(s) (${lote.formato === 'xml' ? 'XML' : 'planilha'}), prontas para simular no ${NOME_REGIME[lote.regime].toLowerCase()}.` : 'Nenhuma operação pôde ser lida.'));
+    const semClasse = lote.grupos.filter((g) => g.entrada.itens.some((it) => !it.classificacao)).length;
+    if (semClasse) p.append(el('div', { class: 'msg warn small' }, `${semClasse} nota(s) têm itens sem classificação tributária. A calculadora vai recusar esses itens e você corrige na Auditoria.`));
+    if (lote.problemas.length) p.append(el('div', { class: 'msg warn small' }, `${lote.problemas.length} arquivo(s)/linha(s) não puderam ser lidos e ficam fora da simulação. Eles aparecem na Auditoria.`));
+    if (lote.formato === 'xml' && this.state.empresaAtiva?.regime_atual === 'simples-nacional') p.append(el('div', { class: 'msg warn small' }, 'Esta empresa está no Simples Nacional, mas notas em XML são simuladas no regime normal (como referência). Para calcular o Simples use a planilha CSV.'));
+    if (!n) return;
+    this.desenharCenarios(); document.getElementById('processar').hidden = false; this.desenharProcessar();
   }
 
-  bindFormularioEvents() {
-    const dropZone = document.getElementById('drop-zone');
-    const fileInput = document.getElementById('file-input');
-
-    // Click to select
-    dropZone.addEventListener('click', (e) => {
-      if (e.target === dropZone || e.target.closest('h3') || e.target.closest('p')) {
-        fileInput.click();
-      }
-    });
-
-    document.getElementById('btn-selecionar')?.addEventListener('click', () => fileInput.click());
-
-    // Drag & drop
-    ['dragenter', 'dragover'].forEach(evt => {
-      dropZone.addEventListener(evt, (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        dropZone.classList.add('over');
-      });
-    });
-
-    ['dragleave', 'drop'].forEach(evt => {
-      dropZone.addEventListener(evt, (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        dropZone.classList.remove('over');
-      });
-    });
-
-    dropZone.addEventListener('drop', (e) => {
-      const files = Array.from(e.dataTransfer.files);
-      this.adicionarArquivos(files);
-    });
-
-    fileInput.addEventListener('change', (e) => {
-      const files = Array.from(e.target.files);
-      this.adicionarArquivos(files);
-      fileInput.value = '';
-    });
-
-    // Baixar modelo CSV
-    document.getElementById('btn-baixar-modelo')?.addEventListener('click', () => this.baixarModeloCSV());
-
-    // Cenários
-    document.querySelectorAll('#escolha-cenarios button').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const cenario = btn.dataset.cenario;
-        if (cenario === 'regime-alternativo') {
-          btn.setAttribute('aria-pressed', btn.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
-          this.cenarios = btn.getAttribute('aria-pressed') === 'true'
-            ? ['regime-atual', 'regime-alternativo']
-            : ['regime-atual'];
-        }
-      });
-    });
-
-    // Processar
-    document.getElementById('btn-processar')?.addEventListener('click', () => this.processarLote());
-
-    // Limpar
-    document.getElementById('btn-limpar')?.addEventListener('click', () => this.limparTudo());
+  async desenharCenarios() {
+    const c = document.getElementById('cenarios'); limpar(c);
+    const podeAlt = lote.regime === 'regime-normal';
+    c.hidden = false;
+    c.append(el('h2', {}, '2. Cenários'));
+    c.append(el('label', { class: 'choice', style: 'display:flex;gap:8px;align-items:center;margin:6px 0' }, el('input', { type: 'checkbox', checked: true, disabled: true }), el('span', {}, el('strong', {}, `Regime ${lote.regime === 'regime-normal' ? 'normal' : 'Simples Nacional'}`), el('span', { class: 'mut small' }, ' — sempre simulado'))));
+    const chk = el('input', { type: 'checkbox', id: 'cen-alt', checked: lote.cenarioAlt, disabled: !podeAlt });
+    c.append(el('label', { style: 'display:flex;gap:8px;align-items:center;margin:6px 0' }, chk, el('span', {}, el('strong', {}, 'Também simular o Simples Nacional'), el('span', { class: 'mut small' }, podeAlt ? ' — comparativo de CBS e IBS entre os regimes' : ' — disponível quando o lote é de regime normal'))));
+    const cfg = el('div', { id: 'cfg-alt', hidden: !lote.cenarioAlt });
+    c.append(cfg);
+    chk.onchange = async () => { lote.cenarioAlt = chk.checked; cfg.hidden = !chk.checked; if (chk.checked) await this.desenharCfgAlt(cfg); };
+    if (lote.cenarioAlt) await this.desenharCfgAlt(cfg);
   }
 
-  bindProgressoEvents() {
-    document.getElementById('btn-cancelar')?.addEventListener('click', () => this.cancelarJob());
-    document.getElementById('btn-ver-resultados')?.addEventListener('click', () => this.irParaResultados());
-  }
-
-  adicionarArquivos(files) {
-    const validos = files.filter(f => {
-      const ext = f.name.toLowerCase().split('.').pop();
-      if (!['xml', 'zip', 'csv'].includes(ext)) {
-        toast(`Arquivo ignorado: ${f.name} (extensão não suportada)`, 'warn');
-        return false;
-      }
-      if (f.size > 50 * 1024 * 1024) {
-        toast(`Arquivo muito grande: ${f.name} (máx 50MB)`, 'err');
-        return false;
-      }
-      return true;
-    });
-
-    if (validos.length === 0) return;
-
-    this.arquivos = [...this.arquivos, ...validos];
-    this.renderArquivosSelecionados();
-    this.atualizarVisibilidadeSecoes();
-  }
-
-  renderArquivosSelecionados() {
-    const container = document.getElementById('arquivos-selecionados');
-    limpar(container);
-
-    if (this.arquivos.length === 0) return;
-
-    let totalNotas = 0;
-    const lista = el('div', { style: 'display: flex; flex-direction: column; gap: 8px;' });
-
-    this.arquivos.forEach((file, idx) => {
-      const ext = file.name.toLowerCase().split('.').pop();
-      const icone = ext === 'zip' ? '📦' : ext === 'csv' ? '📊' : '📄';
-      const item = el('div', { class: 'card', style: 'padding: 12px 16px; display: flex; align-items: center; gap: 12px;' });
-      item.innerHTML = `
-        <span style="font-size: 24px;">${icone}</span>
-        <div style="flex: 1; min-width: 0;">
-          <div style="font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${file.name}</div>
-          <div class="mut small">${(file.size / 1024).toFixed(1)} KB • ${ext.toUpperCase()}</div>
-        </div>
-        <button class="link" data-idx="${idx}">Remover</button>
-      `;
-      item.querySelector('button').onclick = () => this.removerArquivo(idx);
-      lista.appendChild(item);
-    });
-
-    container.appendChild(el('h3', {}, `${this.arquivos.length} arquivo(s) selecionado(s)`));
-    container.appendChild(lista);
-  }
-
-  removerArquivo(idx) {
-    this.arquivos.splice(idx, 1);
-    this.renderArquivosSelecionados();
-    this.atualizarVisibilidadeSecoes();
-  }
-
-  atualizarVisibilidadeSecoes() {
-    const temArquivos = this.arquivos.length > 0;
-    document.getElementById('cenarios-container').hidden = !temArquivos;
-    document.getElementById('processar-container').hidden = !temArquivos;
-  }
-
-  async baixarModeloCSV() {
-    const cabecalho = ['tipo', 'descricao', 'codigo', 'classificacao', 'valor', 'uf', 'municipio', 'data', 'atividade'];
-    const linhas = [
-      ['produto', 'Carne bovina fresca', '02011000', '200015', '1500.00', 'SP', '3550308', '2025-01-15', ''],
-      ['servico', 'Consultoria em TI', '', '200028', '5000.00', 'SP', '3550308', '2025-01-15', '6201-5/01'],
+  async desenharCfgAlt(cfg) {
+    limpar(cfg);
+    const k = lote.cfgAlt; const deps = await depsDoLote(this.api);
+    const data = lote.grupos[0]?.entrada.data;
+    const tem = (t) => lote.grupos.some((g) => g.entrada.itens.some((i) => i.tipo === t));
+    const lis = async (tp) => (data ? atividadesDe(deps, data, tp) : []);
+    const sel = (id, lista, atual, onch) => el('select', { id, onchange: (e) => onch(e.target.value) }, el('option', { value: '' }, 'Escolha'), lista.map((a) => el('option', { value: a.codigo, selected: a.codigo === atual }, `${a.codigo} – ${a.descricao}`.slice(0, 110))));
+    const campos = [
+      campo('Alíquota efetiva de CBS (%)', 'Do seu PGDAS-D. Ex.: 1,1612', el('input', { id: 'alt-cbs', inputmode: 'decimal', value: k.cbs, oninput: (e) => { k.cbs = e.target.value; } }), 'alt-cbs'),
+      campo('Alíquota efetiva de IBS (%)', 'Ex.: 0,0129', el('input', { id: 'alt-ibs', inputmode: 'decimal', value: k.ibs, oninput: (e) => { k.ibs = e.target.value; } }), 'alt-ibs'),
     ];
-    const csv = gerarCSV(cabecalho, linhas);
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'modelo-lote-simulacao.csv';
-    a.click();
-    URL.revokeObjectURL(url);
-    toast('Modelo CSV baixado', 'ok');
+    if (tem('produto')) campos.push(campo('Atividade dos produtos', 'Define o anexo do Simples', sel('alt-ap', await lis('55'), k.ativProduto, (v) => { k.ativProduto = v; }), 'alt-ap'));
+    if (tem('servico')) campos.push(campo('Atividade dos serviços', 'Define o anexo do Simples', sel('alt-as', await lis('91'), k.ativServico, (v) => { k.ativServico = v; }), 'alt-as'));
+    cfg.append(el('div', { class: 'msg warn small' }, 'As notas em XML não trazem os dados do Simples. Informe as alíquotas efetivas e a atividade: valem para todas as notas do lote. É uma estimativa de comparação, não a apuração do DAS.'),
+      el('div', { class: 'grid' }, campos),
+      el('label', { style: 'display:flex;gap:8px;align-items:center' }, el('input', { type: 'checkbox', checked: k.fatorR, onchange: (e) => { k.fatorR = e.target.checked; } }), 'Fator R aplicável (serviços do Anexo V → III)'),
+      el('label', { style: 'display:flex;gap:8px;align-items:center' }, el('input', { type: 'checkbox', checked: k.sublimite, onchange: (e) => { k.sublimite = e.target.checked; } }), 'Ultrapassou o sublimite do Simples'));
   }
 
-  async processarLote() {
-    if (this.arquivos.length === 0) {
-      aviso('lote-msg', 'Selecione ao menos um arquivo.', 'warn');
-      return;
-    }
+  desenharProcessar() {
+    const c = document.getElementById('processar'); limpar(c);
+    const n = lote.grupos.length;
+    c.append(el('h2', {}, '3. Processar'), el('div', { id: 'proc-msg', role: 'alert' }),
+      el('div', { class: 'bar', id: 'proc-barra', hidden: true }, el('i', { id: 'proc-i', style: 'width:0%' })),
+      el('p', { class: 'mut small' }, `Cada operação conta como 1 simulação na sua cota${lote.cenarioAlt ? ' (o cenário do Simples conta de novo)' : ''}.`),
+      el('div', { class: 'row', style: 'justify-content:flex-end' }, el('button', { class: 'sec', id: 'limpar-lote' }, 'Limpar'), el('button', { id: 'processar-btn' }, `Simular ${n} operação(ões)`)));
+    document.getElementById('limpar-lote').onclick = () => { reiniciarLote(); this.router.navigate('lote'); };
+    document.getElementById('processar-btn').onclick = () => this.executar();
+  }
 
-    const empresa = this.state.empresaAtiva;
-    if (!empresa) {
-      aviso('lote-msg', 'Nenhuma empresa selecionada.', 'err');
-      return;
-    }
-
-    const btn = document.getElementById('btn-processar');
-    btn.disabled = true;
-    btn.innerHTML = `${spinner(20)} Enviando...`;
-    aviso('lote-msg');
-
+  async executar() {
+    const btn = document.getElementById('processar-btn'); btn.disabled = true; aviso('proc-msg');
+    const barra = document.getElementById('proc-barra'); const prog = document.getElementById('proc-i'); barra.hidden = false;
+    const deps = await depsDoLote(this.api);
     try {
-      const formData = new FormData();
-      this.arquivos.forEach(f => formData.append('files', f));
-      formData.append('cnpj', empresa.cnpj);
-      formData.append('regime_atual', empresa.regime_atual);
-      formData.append('cenarios', JSON.stringify(this.cenarios));
-
-      const result = await this.api.upload('/simulacoes/lote/xml', formData);
-
-      this.jobId = result.jobId;
-      this.etapaAtual = 'queued';
-
-      // Re-render para mostrar progresso
-      const root = document.getElementById('app-root');
-      const content = root.querySelector('#content');
-      content.innerHTML = '';
-      content.appendChild(this.render());
-      this.mount();
-
-    } catch (e) {
-      aviso('lote-msg', e.message, 'err');
-      btn.disabled = false;
-      btn.textContent = 'Processar Lote';
-    }
-  }
-
-  iniciarPolling() {
-    this.pollInterval = setInterval(() => this.verificarProgresso(), 2000);
-    this.verificarProgresso(); // Imediato
-  }
-
-  async verificarProgresso() {
-    try {
-      const status = await this.api.get(`/simulacoes/lote/${this.jobId}/status`);
-
-      this.atualizarProgressoUI(status);
-
-      if (status.status === 'completed' || status.status === 'failed') {
-        this.pararPolling();
-        if (status.status === 'completed') {
-          this.mostrarConclusao(status);
-        } else {
-          this.mostrarErro(status);
-        }
+      if (lote.cenarioAlt) {
+        const k = lote.cfgAlt;
+        if (!k.cbs.trim() || !k.ibs.trim()) throw new Error('Informe as alíquotas efetivas de CBS e IBS do Simples Nacional.');
+        if (lote.grupos.some((g) => g.entrada.itens.some((i) => i.tipo === 'produto')) && !k.ativProduto) throw new Error('Escolha a atividade dos produtos para o Simples Nacional.');
+        if (lote.grupos.some((g) => g.entrada.itens.some((i) => i.tipo === 'servico')) && !k.ativServico) throw new Error('Escolha a atividade dos serviços para o Simples Nacional.');
       }
+      const total = lote.grupos.length * (lote.cenarioAlt ? 2 : 1);
+      const mostrar = (feitas, desta, base = 0) => { prog.style.width = `${Math.round(((base + feitas) / total) * 100)}%`; aviso('proc-msg', `Simulando… ${base + feitas} de ${total}`, 'warn'); };
+      lote.res = await processar(lote.grupos, this.api, (f) => mostrar(f, 0));
+      lote.resAlt = []; lote.gruposAlt = []; lote.problemasAlt = [];
+      if (lote.cenarioAlt) {
+        const alt = await gruposSimples(lote.grupos, lote.cfgAlt, deps);
+        lote.gruposAlt = alt.grupos; lote.problemasAlt = alt.problemas;
+        lote.resAlt = await processar(alt.grupos, this.api, (f) => mostrar(f, 0, lote.grupos.length));
+      }
+      prog.style.width = '100%'; aviso('proc-msg');
+      lote.salvos = []; this.mostrarConcluido();
     } catch (e) {
-      console.error('Erro ao verificar progresso:', e);
-      // Continua tentando
+      aviso('proc-msg', e.message + (lote.res.length ? ` As ${lote.res.length} primeiras operações foram simuladas e contadas na sua cota.` : ''), 'err');
+      btn.disabled = false; barra.hidden = true;
     }
   }
 
-  atualizarProgressoUI(status) {
-    const progress = status.progress || { total: 0, processados: 0, erros: 0 };
-    const total = progress.total || 1;
-    const processados = progress.processados || 0;
-    const pct = Math.round((processados / total) * 100);
-
-    const bar = document.getElementById('progress-bar');
-    const text = document.getElementById('progress-text');
-    const count = document.getElementById('progress-count');
-    const etapa = document.getElementById('progress-etapa');
-    const detTotal = document.getElementById('det-total');
-    const detProcessadas = document.getElementById('det-processadas');
-    const detErros = document.getElementById('det-erros');
-    const detTempo = document.getElementById('det-tempo');
-
-    if (bar) bar.style.width = `${pct}%`;
-    if (text) text.textContent = this.traduzirStatus(status.status);
-    if (count) count.textContent = `${processados.toLocaleString('pt-BR')} / ${total.toLocaleString('pt-BR')} notas`;
-    if (etapa) etapa.textContent = status.etapa ? this.traduzirEtapa(status.etapa) : '';
-    if (detTotal) detTotal.textContent = total.toLocaleString('pt-BR');
-    if (detProcessadas) detProcessadas.textContent = processados.toLocaleString('pt-BR');
-    if (detErros) detErros.textContent = (progress.erros || 0).toLocaleString('pt-BR');
-    if (detTempo && status.tempoEstimado) detTempo.textContent = `${status.tempoEstimado}s`;
-
-    this.etapaAtual = status.etapa || '';
-  }
-
-  traduzirStatus(status) {
-    const map = {
-      queued: 'Na fila...',
-      processing: 'Processando...',
-      completed: 'Concluído!',
-      failed: 'Falhou',
-      cancelled: 'Cancelado'
+  mostrarConcluido() {
+    const a = document.getElementById('concluido'); limpar(a);
+    document.getElementById('processar').hidden = true; document.getElementById('cenarios').hidden = true;
+    const t = totais(lote.res);
+    const cards = [
+      el('div', { class: 'kpi main' }, el('div', { class: 'v' }, dinheiro(t.total)), el('div', { class: 'l' }, 'CBS + IBS (regime ' + (lote.regime === 'regime-normal' ? 'normal' : 'Simples') + ')')),
+      el('div', { class: 'kpi' }, el('div', { class: 'v' }, `${t.ok} de ${t.operacoes}`), el('div', { class: 'l' }, 'Operações sem problemas'))];
+    if (lote.resAlt.length) { const c = comparativoRegimes(lote.res, lote.resAlt); cards.push(el('div', { class: 'kpi' }, el('div', { class: 'v' }, dinheiro(c.simples)), el('div', { class: 'l' }, `CBS + IBS no Simples (${c.comparadas} nota(s) comparada(s))`))); }
+    else if (lote.regime === 'regime-normal') { const c = comparativoAtual(lote.res, null); if (c.comparavel) cards.push(el('div', { class: 'kpi' }, el('div', { class: 'v' }, dinheiro(c.atual)), el('div', { class: 'l' }, 'Tributos atuais informados nas notas'))); }
+    a.append(el('div', { class: 'card' }, el('h2', {}, 'Lote processado'), el('div', { class: 'totals' }, cards),
+      t.comProblema ? el('div', { class: 'msg warn' }, `${t.comProblema} operação(ões) com problema${lote.problemas.length ? ` e ${lote.problemas.length} arquivo(s)/linha(s) ilegíveis` : ''}. Corrija na Auditoria — itens com problema ficam fora dos totais até serem corrigidos.`) : el('div', { class: 'msg ok' }, 'Todas as operações foram calculadas sem problemas.'),
+      el('div', { id: 'salvar-msg' }),
+      el('div', { class: 'row' },
+        el('button', { id: 'ir-auditoria' }, t.comProblema || lote.problemas.length ? 'Corrigir na Auditoria' : 'Ver Auditoria'),
+        el('button', { class: 'sec', id: 'ir-relatorio' }, 'Gerar relatório'),
+        el('button', { class: 'sec', id: 'salvar-visao' }, 'Salvar na Visão geral'),
+        el('button', { class: 'sec', id: 'novo-lote' }, 'Novo lote'))));
+    document.getElementById('ir-auditoria').onclick = () => this.router.navigate('auditoria');
+    document.getElementById('ir-relatorio').onclick = () => this.router.navigate('relatorio');
+    document.getElementById('novo-lote').onclick = () => { reiniciarLote(); this.router.navigate('lote'); };
+    document.getElementById('salvar-visao').onclick = async (e) => {
+      e.target.disabled = true;
+      const ok = await salvarLote(this.api, this.state);
+      aviso('salvar-msg', ok ? 'Totais salvos na Visão geral. Se corrigir itens depois, salve de novo para atualizar.' : 'Não foi possível salvar agora.', ok ? 'ok' : 'err');
+      e.target.disabled = false;
     };
-    return map[status] || status;
   }
 
-  traduzirEtapa(etapa) {
-    const map = {
-      validando_arquivos: 'Validando arquivos...',
-      extraindo_xmls: 'Extraindo XMLs do ZIP...',
-      parseando_csv: 'Lendo planilha CSV...',
-      validando_regras_cbs_ibs: 'Validando regras CBS/IBS/IS...',
-      calculando_regime_atual: 'Calculando regime atual...',
-      calculando_regime_alternativo: 'Calculando regime alternativo...',
-      consolidando_resultados: 'Consolidando resultados...',
-      finalizando: 'Finalizando...'
-    };
-    return map[etapa] || etapa;
-  }
-
-  mostrarConclusao(status) {
-    const btnResultados = document.getElementById('btn-ver-resultados');
-    const btnCancelar = document.getElementById('btn-cancelar');
-    const progressText = document.getElementById('progress-text');
-    const bar = document.getElementById('progress-bar');
-
-    if (progressText) progressText.textContent = 'Concluído com sucesso!';
-    if (bar) {
-      bar.style.width = '100%';
-      bar.style.background = 'var(--green)';
-    }
-    if (btnCancelar) btnCancelar.hidden = true;
-    if (btnResultados) btnResultados.hidden = false;
-
-    // Armazenar resultado para redirecionamento
-    this.resultadoFinal = status.resultado;
-    this.temErros = status.progress?.erros > 0;
-  }
-
-  mostrarErro(status) {
-    const progressText = document.getElementById('progress-text');
-    const bar = document.getElementById('progress-bar');
-    const btnCancelar = document.getElementById('btn-cancelar');
-
-    if (progressText) progressText.textContent = 'Erro no processamento';
-    if (bar) {
-      bar.style.width = '100%';
-      bar.style.background = 'var(--red)';
-    }
-    if (btnCancelar) btnCancelar.textContent = 'Voltar';
-
-    toast(`Erro: ${status.erro_mensagem || 'Falha desconhecida'}`, 'err');
-  }
-
-  irParaResultados() {
-    this.pararPolling();
-    if (this.temErros) {
-      this.router.navigate('auditoria', { jobId: this.jobId });
-    } else {
-      this.router.navigate('relatorio', { jobId: this.jobId });
-    }
-  }
-
-  cancelarJob() {
-    this.pararPolling();
-    this.jobId = null;
-    this.arquivos = [];
-    this.cenarios = ['regime-atual'];
-
-    // Re-render formulário
-    const root = document.getElementById('app-root');
-    const content = root.querySelector('#content');
-    content.innerHTML = '';
-    content.appendChild(this.render());
-    this.mount();
-
-    toast('Processamento cancelado', 'warn');
-  }
-
-  limparTudo() {
-    this.arquivos = [];
-    this.cenarios = ['regime-atual'];
-    this.renderArquivosSelecionados();
-    this.atualizarVisibilidadeSecoes();
-
-    // Reset checkboxes
-    document.querySelectorAll('#escolha-cenarios button').forEach(btn => {
-      btn.setAttribute('aria-pressed', btn.dataset.cenario === 'regime-atual' ? 'true' : 'false');
-    });
-  }
-
-  pararPolling() {
-    if (this.pollInterval) {
-      clearInterval(this.pollInterval);
-      this.pollInterval = null;
-    }
-  }
-
-  unmount() {
-    this.pararPolling();
-  }
-
-  formatRegime(regime) {
-    const map = {
-      'simples-nacional': 'Simples Nacional',
-      'lucro-presumido': 'Lucro Presumido',
-      'lucro-real': 'Lucro Real',
-      'regime-normal': 'Regime Normal'
-    };
-    return map[regime] || regime;
-  }
+  unmount() {}
 }

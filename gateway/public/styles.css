@@ -366,6 +366,25 @@ input::placeholder {
   color: var(--mut);
 }
 
+input[type='checkbox'],
+input[type='radio'] {
+  width: 18px;
+  height: 18px;
+  min-height: 0;
+  padding: 0;
+  flex: 0 0 auto;
+  accent-color: #0f9488;
+}
+
+label:has(> input[type='checkbox']),
+label:has(> input[type='radio']) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 input[disabled],
 select[disabled] {
   background: var(--bg);

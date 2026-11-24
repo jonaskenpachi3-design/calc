@@ -18,7 +18,7 @@ export class DanfseCentral {
       el('div', { class: 'card' }, el('h2', {}, 'Gerar PDFs'),
         el('div', { class: 'drop', id: 'drop' }, el('h3', {}, 'Arraste aqui ou escolha os XML'), el('p', { class: 'mut' }, `XML de NFS-e ou um ZIP com vários XML · até ${MAX} por vez`),
           el('input', { type: 'file', id: 'danfse-arq', multiple: true, accept: '.xml,.zip', hidden: true }), el('div', { class: 'row', style: 'justify-content:center' }, el('button', { id: 'danfse-escolher' }, 'Escolher arquivos'))),
-        el('label', { style: 'display:flex;gap:8px;align-items:center;margin-top:10px' }, el('input', { type: 'checkbox', id: 'canhoto' }), 'Incluir canhoto no PDF'),
+        el('label', { style: 'margin-top:10px' }, el('input', { type: 'checkbox', id: 'canhoto' }), 'Incluir canhoto no PDF'),
         el('p', { class: 'mut small' }, 'O gerador oficial só aceita o XML da nota. Para notas sem XML, emita ou baixe o XML no portal da prefeitura ou no emissor nacional. Cada PDF conta na cota mensal do plano.'),
         el('div', { id: 'danfse-msg', role: 'alert' }), el('div', { class: 'bar', id: 'danfse-barra', hidden: true }, el('i', { id: 'danfse-i', style: 'width:0%' })), el('div', { id: 'danfse-lista' })),
       el('div', { class: 'card' }, el('h2', {}, 'Histórico recente'), el('p', { class: 'mut small' }, 'Só data, resultado e tempo. O conteúdo dos XML nunca é guardado.'), el('div', { class: 'scroll' }, el('table', {}, el('thead', {}, el('tr', {}, ['Data', 'Resultado', 'Duração'].map((t) => el('th', {}, t)))), el('tbody', { id: 'danfse-hist' })))));

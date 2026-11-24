@@ -241,13 +241,13 @@ function renderSidebar() {
     </div>
     <div class="side-label">Empresa</div>
     <div class="nav" aria-label="Empresa ativa">
-      <button class="nav-item" disabled style="justify-content: flex-start;">
+      <button class="nav-item" disabled style="justify-content: flex-start; gap: 10px;">
         <span class="nav-num">${esc(inicial)}</span>
-        <span>
-          <div class="nav-text">${esc(empresa?.razao_social || 'Empresa')}</div>
+        <span style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
+          <div class="nav-text" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${esc(empresa?.razao_social || 'Empresa')}</div>
           <div class="nav-cap">${formatRegime(empresa?.regime_atual)}</div>
         </span>
-        <span class="pill pill-blue" style="margin-left: auto; font-size: 11px;">${empresa?.cnpj ? formatCNPJ(empresa.cnpj) : ''}</span>
+        <span class="pill pill-blue" style="flex-shrink: 0; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px;">${empresa?.cnpj ? formatCNPJ(empresa.cnpj) : ''}</span>
       </button>
       <button class="link" id="trocar-empresa" style="margin-top: 8px; width: 100%; text-align: left;">Trocar de empresa</button>
     </div>

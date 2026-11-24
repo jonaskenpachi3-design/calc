@@ -19,15 +19,15 @@ export function dadosDoRelatorio() {
   return { t, comp, regimes };
 }
 
-const tabela = (cab, linhas) => el('table', {}, el('thead', {}, el('tr', {}, cab.map((c, k) => el('th', { class: k ? 'n' : '' }, c)))), el('tbody', {}, linhas.map((l) => el('tr', {}, l.map((c, k) => el('td', { class: k ? 'n' : '' }, c))))));
-const barras = (lista) => { const max = Math.max(...lista.map((b) => b.valor), 0.01); return lista.map((b) => el('div', { class: 'rel-barra' }, el('span', { class: 'r' }, b.rotulo), el('span', { class: 'b' + (b.alt ? ' alt' : ''), style: `width:${Math.max(1, Math.round((b.valor / max) * 60))}%` }), dinheiro(b.valor))); };
+const tabela = (cab, linhas) => el('table', {}, el('thead', {}, el('tr', {}, cab.map((c, k) => el('th', { class: k ? 'n' : '' }, c)))), el('tbody', {}, linhas.map((l) => el('tr', { class: l[0] === 'Total' ? 'total' : '' }, l.map((c, k) => el('td', { class: k ? 'n' : '' }, c))))));
+const barras = (lista) => { const max = Math.max(...lista.map((b) => b.valor), 0.01); return [el('div', { class: 'rel-barras' }, lista.map((b) => el('div', { class: 'rel-barra' }, el('span', { class: 'r' }, b.rotulo), el('span', { class: 'trilha' }, el('span', { class: 'b' + (b.alt ? ' alt' : ''), style: `width:${Math.max(1, Math.round((b.valor / max) * 100))}%` })), el('span', { class: 'v' }, dinheiro(b.valor)))))]; };
 
 export function secaoResumo(d) {
   const { t, comp, regimes } = d; const nos = [];
-  nos.push(el('div', { class: 'rel-kpis' }, [['Total de CBS + IBS', dinheiro(t.total)], ['CBS (federal)', dinheiro(t.cbs)], ['IBS (estados e municípios)', dinheiro(t.ibs)], ['Operações sem problemas', `${t.ok} de ${t.operacoes}`]].map(([r, v]) => el('div', { class: 'rel-kpi' }, el('b', {}, v), el('span', {}, r)))));
+  nos.push(el('div', { class: 'rel-kpis' }, [['Total de CBS + IBS', dinheiro(t.total), true], ['CBS (federal)', dinheiro(t.cbs)], ['IBS (estados e municípios)', dinheiro(t.ibs)], ['Operações sem problemas', `${t.ok} de ${t.operacoes}`]].map(([r, v, main]) => el('div', { class: 'rel-kpi' + (main ? ' main' : '') }, el('span', {}, r), el('b', {}, v)))));
   if (comp && comp.linhas.length && comp.comparavel) {
     nos.push(el('h2', {}, 'Comparativo: tributos atuais × CBS e IBS'), ...barras([{ rotulo: 'Tributos atuais', valor: comp.atual, alt: true }, { rotulo: 'CBS + IBS simulados', valor: comp.novo }]),
-      el('div', { class: 'rel-kpis' }, [['Tributos atuais', dinheiro(comp.atual)], ['CBS + IBS', dinheiro(comp.novo)], [comp.diferenca > 0 ? 'Aumento estimado' : 'Redução estimada', dinheiro(Math.abs(comp.diferenca))]].map(([r, v]) => el('div', { class: 'rel-kpi' }, el('b', {}, v), el('span', {}, r)))),
+      el('div', { class: 'rel-destaque' + (comp.diferenca > 0 ? ' mais' : '') }, el('span', {}, comp.diferenca > 0 ? 'Aumento estimado' : 'Redução estimada'), el('b', {}, dinheiro(Math.abs(comp.diferenca))), comp.atual > 0 ? el('span', { class: 'pct' }, `${comp.diferenca > 0 ? '+' : '−'}${pct.format(Math.abs(comp.diferenca / comp.atual) * 100)}% sobre os tributos atuais`) : null),
       el('div', { class: 'rel-nota' }, 'Comparação bruta, sem créditos. Tributos atuais (ICMS, ISS, PIS e COFINS) conforme informado nas notas ou na planilha; nenhuma calculadora da Receita calcula o modelo atual.'
         + (comp.estimadas ? ` ${comp.estimadas} operação(ões) com carga estimada de ${pct.format(comp.pct)}%.` : '') + (comp.semDados ? ` ${comp.semDados} operação(ões) sem tributos atuais ficaram fora.` : '') + (comp.parcial ? ' Nas NFS-e só o ISS é conhecido, então a carga atual dessas notas está subestimada.' : '') + ' Entre 2026 e 2033 os dois sistemas convivem; aqui a CBS e o IBS aparecem com as alíquotas de referência, como se já estivessem plenos.'));
   }

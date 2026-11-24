@@ -1477,14 +1477,28 @@ code.key {
 .folha th { text-align: left; border-bottom: 2px solid var(--marca); padding: 5px 6px; }
 .folha td { border-bottom: 1px solid #ddd; padding: 5px 6px; vertical-align: top; }
 .folha .n { text-align: right; white-space: nowrap; }
-.folha .rel-kpis { display: flex; gap: 10px; flex-wrap: wrap; margin: 10px 0; }
-.folha .rel-kpi { border: 1px solid #ccc; border-left: 4px solid var(--marca); padding: 8px 12px; min-width: 130px; }
-.folha .rel-kpi b { display: block; font-size: 16px; }
-.folha .rel-kpi span { font-size: 11px; color: #555; }
-.folha .rel-barra { display: flex; align-items: center; gap: 8px; margin: 4px 0; font-size: 12px; }
-.folha .rel-barra .r { width: 190px; }
-.folha .rel-barra .b { height: 14px; background: var(--marca); border-radius: 3px; min-width: 2px; }
+.folha .rel-kpis { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr; gap: 10px; margin: 12px 0; }
+.folha .rel-kpi { border: 1px solid #d5dbe0; border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 3px; }
+.folha .rel-kpi span { font-size: 10.5px; color: #555; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; }
+.folha .rel-kpi b { font-size: 18px; }
+.folha .rel-kpi.main { background: var(--marca); border-color: var(--marca); color: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.folha .rel-kpi.main span { color: #fff; opacity: 0.9; }
+.folha .rel-barras { margin: 8px 0 10px; }
+.folha .rel-barra { display: grid; grid-template-columns: 150px 1fr 110px; align-items: center; gap: 10px; margin: 6px 0; font-size: 12px; }
+.folha .rel-barra .trilha { height: 14px; background: #eef1f4; border-radius: 99px; overflow: hidden; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.folha .rel-barra .b { display: block; height: 100%; background: var(--marca); border-radius: 99px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .folha .rel-barra .b.alt { background: #9aa5b1; }
+.folha .rel-barra .v { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.folha .rel-destaque { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; border: 1px solid var(--marca); border-left-width: 5px; border-radius: 8px; padding: 10px 14px; margin: 10px 0; background: #f0f8f7; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.folha .rel-destaque span { font-size: 12px; color: #444; }
+.folha .rel-destaque b { font-size: 20px; color: var(--marca); }
+.folha .rel-destaque .pct { color: #555; }
+.folha .rel-destaque.mais { border-color: #b94f4f; background: #fdf1f1; }
+.folha .rel-destaque.mais b { color: #b94f4f; }
+.folha tr.total td { font-weight: 800; border-top: 2px solid var(--marca); border-bottom: 0; background: #f6f8f9; }
+.folha td.n, .folha th.n { font-variant-numeric: tabular-nums; }
+.folha tbody tr:nth-child(even):not(.total) td { background: #fafbfc; }
+@media (max-width: 640px) { .folha .rel-kpis { grid-template-columns: 1fr 1fr; } .folha .rel-barra { grid-template-columns: 1fr; gap: 2px; } .folha .rel-barra .v { text-align: left; } }
 .folha .rel-nota { font-size: 11px; color: #555; margin: 4px 0; }
 .folha .rel-parecer { border-left: 4px solid var(--marca); background: #f6f8f9; padding: 8px 12px; margin: 12px 0; font-size: 12px; white-space: pre-wrap; }
 .folha .rel-rodape { margin-top: 24px; border-top: 1px solid #ccc; padding-top: 8px; font-size: 11px; color: #555; }

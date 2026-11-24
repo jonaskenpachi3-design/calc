@@ -6,6 +6,9 @@ import {
 } from './auth.js';
 import { PLANOS, limiteDoPlano, inicioDoMes } from './plans.js';
 import { chamar, CacheTtl } from './upstream.js';
+import { criarEmail } from './email.js';
+import { criarAsaas, ErroAsaas, documentoValido } from './asaas.js';
+import { textoDoEmail } from './email-textos.js';
 import {
   montarRegimeNormal, traduzirRegimeNormal, montarSimples, traduzirSimples,
   mensagemDeErroOficial, EntradaInvalida,
@@ -80,9 +83,29 @@ export function criarApp(config, db) {
   const cache = new CacheTtl();
   const janelas = new Map(); // tenantId -> { minuto, contagem }
   const up = config.upstream;
+  const email = criarEmail(config);
+  const asaas = criarAsaas(config);
+  db.definirCarenciaDias(config.carenciaDias);
 
   if (config.authSecret.length < 32) {
     throw new Error('AUTH_SECRET deve ter ao menos 32 caracteres');
+  }
+
+  /** Aplica um evento de pagamento/assinatura do Asaas. Idempotente: pode ser chamado de novo com o mesmo evento. */
+  function aplicarEventoDeCobranca(a, ev) {
+    const tipo = ev.event;
+    if (tipo === 'PAYMENT_CONFIRMED' || tipo === 'PAYMENT_RECEIVED') {
+      // Período pago = até um mês depois do vencimento da cobrança paga.
+      const venc = /^\d{4}-\d{2}-\d{2}$/.test(ev.payment?.dueDate || '') ? new Date(`${ev.payment.dueDate}T23:59:59-03:00`) : new Date();
+      venc.setUTCMonth(venc.getUTCMonth() + 1);
+      const validoAte = Math.max(a.valido_ate, venc.getTime());
+      db.atualizarAssinatura(a.tenant_id, a.status === 'cancelada' ? 'cancelada' : 'ativa', validoAte);
+      db.definirPlano(a.tenant_id, a.plano);
+    } else if (tipo === 'PAYMENT_REFUNDED' || tipo === 'PAYMENT_CHARGEBACK_REQUESTED') {
+      db.atualizarAssinatura(a.tenant_id, 'suspensa', 0);
+    } else if (tipo === 'SUBSCRIPTION_DELETED' || tipo === 'SUBSCRIPTION_INACTIVATED') {
+      db.atualizarAssinatura(a.tenant_id, 'cancelada', a.valido_ate);
+    }
   }
 
   // ---------- autenticação ----------
@@ -214,10 +237,13 @@ export function criarApp(config, db) {
     if (pathname === '/health') return responder(res, 200, { status: 'ok' });
 
     // --- contas ---
-    if (metodo === 'GET' && pathname === '/planos') return responder(res, 200, { planos: PLANOS });
+    if (metodo === 'GET' && pathname === '/planos') return responder(res, 200, { planos: PLANOS, precos: config.precos, cobranca: asaas.ativo });
 
     // --- entrega de links por e-mail (webhook) e confirmação de e-mail ---
     const entregar = (corpo) => {
+      // E-mail direto por SMTP (se configurado) e/ou webhook (se configurado).
+      const msg = email.ativo && textoDoEmail(corpo, config.appName);
+      if (msg) email.enviarSemFalhar({ para: corpo.email, assunto: msg.assunto, texto: msg.texto });
       if (!config.resetWebhookUrl) return;
       fetch(config.resetWebhookUrl, {
         method: 'POST', signal: AbortSignal.timeout(5000),
@@ -332,6 +358,24 @@ export function criarApp(config, db) {
       return responder(res, 200, { plano });
     }
 
+    // --- cobrança: webhook do Asaas (autenticado pelo token configurado no painel do Asaas) ---
+    if (metodo === 'POST' && pathname === '/webhooks/asaas') {
+      if (!asaas.ativo || !config.asaas.webhookToken) throw new HttpError(503, 'webhook_desativado', 'Cobrança não configurada');
+      if (!compararSegredos(String(req.headers['asaas-access-token'] || ''), config.asaas.webhookToken)) throw new HttpError(401, 'token_invalido', 'Token do webhook inválido');
+      const ev = await lerJson(req, 200_000);
+      const idEvento = typeof ev?.id === 'string' ? ev.id : null;
+      if (idEvento && !db.registrarEventoCobranca(idEvento)) return responder(res, 200, { ok: true, repetido: true });
+      try {
+        const assinaturaId = ev?.payment?.subscription || ev?.subscription?.id;
+        const a = typeof assinaturaId === 'string' ? db.assinaturaPorId(assinaturaId) : null;
+        if (a) aplicarEventoDeCobranca(a, ev);
+      } catch (e) {
+        if (idEvento) db.esquecerEventoCobranca(idEvento); // o Asaas tenta de novo
+        throw e;
+      }
+      return responder(res, 200, { ok: true });
+    }
+
     // --- a partir daqui, tudo exige credencial ---
     if (!pathname.startsWith('/v1/') && !/^\/(me|keys|usage|history|empresas)/.test(pathname)) {
       throw new HttpError(404, 'nao_encontrado', 'Rota inexistente');
@@ -352,9 +396,63 @@ export function criarApp(config, db) {
       return responder(res, 202, { mensagem: 'Se ainda houver links disponíveis, enviamos um novo para o seu e-mail.' });
     }
 
+    // --- assinatura (cobrança) ---
+    if (metodo === 'GET' && pathname === '/me/assinatura') {
+      const t = db.tenantPorId(ctx.tenantId);
+      const a = db.assinaturaDoTenant(ctx.tenantId);
+      let url = null;
+      if (a && a.status !== 'cancelada' && asaas.ativo) {
+        // Link da fatura em aberto (primeira cobrança ou renovação), para a pessoa pagar.
+        try { url = (await asaas.cobrancas(a.assinatura_id)).find((c) => ['PENDING', 'OVERDUE'].includes(c.status) && c.invoiceUrl)?.invoiceUrl ?? null; } catch { /* sem link por ora */ }
+      }
+      return responder(res, 200, {
+        cobranca_ativa: asaas.ativo, precos: config.precos, plano: t.plano, plano_vencido: !!t.plano_vencido, carencia_dias: config.carenciaDias,
+        assinatura: a ? { plano: a.plano, status: a.status, valido_ate: a.valido_ate ? new Date(a.valido_ate).toISOString() : null, url } : null,
+      });
+    }
+
+    if (metodo === 'POST' && pathname === '/me/assinatura') {
+      if (ctx.via !== 'sessao') throw new HttpError(403, 'apenas_sessao', 'Use uma sessão de usuário');
+      if (!asaas.ativo) throw new HttpError(503, 'cobranca_desativada', 'A cobrança ainda não está ativa. Fale com o responsável pelo sistema.');
+      const { plano, cpfCnpj, nome } = await lerJson(req, 2_000);
+      if (!(config.precos[plano] > 0)) throw new HttpError(400, 'plano_invalido', 'Escolha um plano pago');
+      if (!documentoValido(cpfCnpj)) throw new HttpError(400, 'documento_invalido', 'CPF ou CNPJ inválido');
+      const documento = String(cpfCnpj).replace(/\D/g, '');
+      const t = db.tenantPorId(ctx.tenantId);
+      const nomeCobranca = (typeof nome === 'string' && nome.trim() ? nome.trim() : t.nome).slice(0, 120);
+      const atual = db.assinaturaDoTenant(ctx.tenantId);
+      if (atual && atual.status === 'ativa' && atual.plano === plano && !t.plano_vencido) throw new HttpError(409, 'ja_contratado', 'Você já tem este plano');
+      const usuario = db.usuarioPorId(ctx.userId);
+      try {
+        const clienteId = atual && atual.cpf_cnpj === documento ? atual.cliente_id
+          : (await asaas.criarCliente({ nome: nomeCobranca, cpfCnpj: documento, email: usuario.email, referencia: ctx.tenantId })).id;
+        const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+        const sub = await asaas.criarAssinatura({ cliente: clienteId, valor: config.precos[plano], primeiroVencimento: hoje, descricao: `${config.appName} - plano ${plano}`, referencia: `nexo:${ctx.tenantId}:${plano}` });
+        // O plano só muda quando o pagamento é confirmado; o período já pago (se houver) continua valendo.
+        db.gravarAssinatura({ tenant_id: ctx.tenantId, provedor: 'asaas', cliente_id: clienteId, cpf_cnpj: documento, assinatura_id: sub.id, plano, status: 'aguardando_pagamento', valido_ate: atual?.valido_ate ?? 0 });
+        if (atual && atual.assinatura_id !== sub.id && atual.status !== 'cancelada') asaas.removerAssinatura(atual.assinatura_id).catch((e) => console.error('Falha ao remover a assinatura anterior:', e.message));
+        let url = null;
+        try { url = (await asaas.cobrancas(sub.id)).find((c) => c.invoiceUrl)?.invoiceUrl ?? null; } catch { /* a tela busca o link depois */ }
+        return responder(res, 201, { assinatura_id: sub.id, status: 'aguardando_pagamento', url });
+      } catch (e) {
+        if (e instanceof ErroAsaas) throw new HttpError(e.status >= 500 || e.status === 401 ? 502 : 400, 'cobranca_recusada', `Não foi possível criar a assinatura: ${e.message}`);
+        throw e;
+      }
+    }
+
+    if (metodo === 'DELETE' && pathname === '/me/assinatura') {
+      if (ctx.via !== 'sessao') throw new HttpError(403, 'apenas_sessao', 'Use uma sessão de usuário');
+      const a = db.assinaturaDoTenant(ctx.tenantId);
+      if (!a || a.status === 'cancelada') throw new HttpError(404, 'sem_assinatura', 'Não há assinatura ativa');
+      try { await asaas.removerAssinatura(a.assinatura_id); }
+      catch (e) { if (!(e instanceof ErroAsaas) || e.status !== 404) throw new HttpError(502, 'cobranca_recusada', `Não foi possível cancelar: ${e.message}`); }
+      db.atualizarAssinatura(ctx.tenantId, 'cancelada', a.valido_ate);
+      return responder(res, 200, { mensagem: 'Assinatura cancelada. O plano continua até o fim do período já pago.', valido_ate: a.valido_ate ? new Date(a.valido_ate).toISOString() : null });
+    }
+
     if (metodo === 'GET' && pathname === '/me') {
       const t = db.tenantPorId(ctx.tenantId);
-      return responder(res, 200, { id: t.id, nome: t.nome, plano: t.plano, email_confirmado: ctx.via === 'sessao' ? ctx.confirmado : null, confirmacao_obrigatoria: config.exigirConfirmacaoEmail });
+      return responder(res, 200, { id: t.id, nome: t.nome, plano: t.plano, plano_vencido: !!t.plano_vencido, email_ativo: email.ativo, email_confirmado: ctx.via === 'sessao' ? ctx.confirmado : null, confirmacao_obrigatoria: config.exigirConfirmacaoEmail });
     }
 
     // --- Empresas (Multi-CNPJ) ---
@@ -578,6 +676,31 @@ export function criarApp(config, db) {
       };
       await Promise.all(Array.from({ length: 4 }, trabalhador));
       return responder(res, 200, { resultados });
+    }
+
+    // Envia por e-mail um PDF de DANFSe que o navegador já tem em mãos. Nada é guardado no servidor.
+    if (metodo === 'POST' && pathname === '/v1/danfse/email') {
+      if (!email.ativo) throw new HttpError(503, 'email_desativado', 'O envio de e-mail não está configurado neste sistema.');
+      const { para, nome, pdf, mensagem } = await lerJson(req, 8_000_000);
+      if (!emailValido(para)) throw new HttpError(400, 'email_invalido', 'E-mail do destinatário inválido');
+      const bytes = typeof pdf === 'string' ? Buffer.from(pdf, 'base64') : Buffer.alloc(0);
+      if (bytes.length < 8 || bytes.subarray(0, 5).toString('latin1') !== '%PDF-') throw new HttpError(400, 'pdf_invalido', 'Envie o PDF do DANFSe em base64');
+      if (bytes.length > 5_000_000) throw new HttpError(413, 'pdf_grande', 'PDF acima de 5 MB');
+      const hoje = new Date(); hoje.setUTCHours(0, 0, 0, 0);
+      if (db.contarUso(ctx.tenantId, 'email', hoje.toISOString()) >= config.emailsPorDia) throw new HttpError(429, 'limite_email', `Limite de ${config.emailsPorDia} e-mails por dia atingido`);
+      const arquivo = (typeof nome === 'string' ? nome : 'danfse').replace(/[^\w.\- ]/g, '').replace(/\.pdf$/i, '').slice(0, 80) || 'danfse';
+      const esc = db.obterEscritorio(ctx.tenantId);
+      const remetente = esc?.nome || db.tenantPorId(ctx.tenantId).nome;
+      const texto = [typeof mensagem === 'string' && mensagem.trim() ? mensagem.trim().slice(0, 1000) : 'Olá,\n\nSegue em anexo o DANFSe (documento auxiliar da NFS-e).', '', `Enviado por ${remetente}${esc?.contato ? ` (${esc.contato})` : ''} pelo ${config.appName}.`].join('\n');
+      const t0 = Date.now();
+      try {
+        await email.enviar({ para, assunto: `DANFSe - ${arquivo}`, texto, anexos: [{ nome: `${arquivo}.pdf`, tipo: 'application/pdf', conteudo: bytes }] });
+      } catch (e) {
+        console.error('Falha ao enviar DANFSe por e-mail:', e.message);
+        throw new HttpError(502, 'email_falhou', 'Não foi possível enviar o e-mail agora. Tente de novo em instantes.');
+      }
+      db.registrarUso({ tenantId: ctx.tenantId, recurso: 'email', servico: 'smtp', status: 200, duracaoMs: Date.now() - t0 });
+      return responder(res, 200, { enviado: true });
     }
 
     if (metodo === 'POST' && pathname === '/v1/danfse') {

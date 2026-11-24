@@ -1,11 +1,11 @@
 /**
  * Nexo Fiscal — Relatório white-label
  * Abas Resumo executivo / Memória de cálculo, painel com logotipo e parecer do contador,
- * PDF pela impressão do navegador ("Salvar como PDF") e planilha para Excel (CSV).
+ * PDF pela impressão do navegador ("Salvar como PDF") e planilha Excel (.xlsx) e CSV.
  */
 import { el, limpar, aviso, campo, dinheiro } from '../utils.js';
 import { lote, temLote } from '../lote-store.js';
-import { dadosDoRelatorio, montarFolha, imprimir, exportarPlanilha, cargaEstimadaNum } from '../relatorio-doc.js';
+import { dadosDoRelatorio, montarFolha, imprimir, exportarXlsx, exportarPlanilha, cargaEstimadaNum } from '../relatorio-doc.js';
 import { carregarEscritorio, salvarEscritorio, reduzirLogo } from '../escritorio.js';
 
 export class Relatorio {
@@ -61,8 +61,9 @@ export class Relatorio {
       el('label', { style: 'display:flex;gap:8px;align-items:center;margin:8px 0' }, memoria, 'Incluir memória de cálculo no PDF'),
       msg,
       el('div', { class: 'row' }, el('button', { id: 'baixar-pdf', onclick: () => imprimir(montarFolha(d, { aba: memoria.checked ? 'tudo' : 'resumo', parecer: this.parecer, escritorio: this.escritorio, empresa: this.state.empresaAtiva })) }, '⇩ Baixar relatório em PDF'),
-        el('button', { class: 'sec', id: 'baixar-xls', onclick: () => exportarPlanilha(d) }, '⇩ Exportar planilha (Excel)')),
-      el('p', { class: 'mut small' }, 'No PDF, escolha "Salvar como PDF" na janela de impressão. A planilha é um CSV que o Excel abre direto.'),
+        el('button', { class: 'sec', id: 'baixar-xls', onclick: () => exportarXlsx(d) }, '⇩ Exportar Excel (.xlsx)'),
+        el('button', { class: 'sec', id: 'baixar-csv', onclick: () => exportarPlanilha(d) }, '⇩ CSV')),
+      el('p', { class: 'mut small' }, 'No PDF, escolha "Salvar como PDF" na janela de impressão. O Excel traz duas abas (Resumo e Operações) com os valores como números.'),
       el('button', { class: 'link', onclick: () => this.router.navigate('configuracoes') }, 'Editar dados do escritório'));
   }
 

@@ -3,7 +3,7 @@
  * Converte XML de NFS-e em PDF pelo gerador oficial. Os XML são lidos neste computador, enviados um a um
  * para o gerador e NÃO ficam guardados; o histórico mostra só data, status e duração.
  */
-import { el, limpar, aviso, downloadBlob } from '../utils.js';
+import { el, limpar, aviso, downloadBlob, toast } from '../utils.js';
 import { lerZip, escreverZip } from '../zip.js';
 
 const MAX = 100;
@@ -83,7 +83,25 @@ export class DanfseCentral {
       el('span', { class: 'mut small' }, `${ok.length} de ${this.itens.length} gerado(s)`)));
     c.append(el('div', { class: 'scroll' }, el('table', {}, el('thead', {}, el('tr', {}, ['Arquivo', 'Situação', ''].map((t) => el('th', {}, t)))), el('tbody', {}, this.itens.map((i) => el('tr', { 'data-estado': i.estado },
       el('td', {}, i.nome), el('td', {}, el('span', { class: 'badge ' + (i.estado === 'erro' ? 'erro' : i.estado === 'ok' ? 'calculado' : 'indisponivel') }, rotulo[i.estado]), i.erro ? el('div', { class: 'small', style: 'color:var(--red)' }, i.erro) : null),
-      el('td', {}, i.estado === 'ok' ? el('button', { class: 'link', onclick: () => downloadBlob(new Blob([i.bytes], { type: 'application/pdf' }), nome(i.nome)) }, 'Baixar PDF') : null)))))));
+      el('td', {}, i.estado === 'ok' ? el('button', { class: 'link', onclick: () => downloadBlob(new Blob([i.bytes], { type: 'application/pdf' }), nome(i.nome)) }, 'Baixar PDF') : null,
+        i.estado === 'ok' && this.state.user?.email_ativo ? el('button', { class: 'link', style: 'margin-left:10px', onclick: (ev) => this.formEmail(ev.target.parentElement, i, nome(i.nome)) }, 'Enviar por e-mail') : null)))))));
+  }
+
+  /** Troca a célula por um campo de e-mail; o PDF vai direto ao destinatário e não fica guardado no servidor. */
+  formEmail(celula, item, arquivo) {
+    limpar(celula);
+    const campoEmail = el('input', { type: 'email', placeholder: 'e-mail do cliente', style: 'min-width:200px', 'aria-label': 'E-mail do destinatário' });
+    const enviar = el('button', {}, 'Enviar');
+    const cancelar = el('button', { class: 'link', onclick: () => this.desenharLista() }, 'Cancelar');
+    enviar.onclick = async () => {
+      enviar.disabled = true;
+      try {
+        let bin = ''; for (let k = 0; k < item.bytes.length; k += 0x8000) bin += String.fromCharCode(...item.bytes.subarray(k, k + 0x8000));
+        await this.api.post('/v1/danfse/email', { para: campoEmail.value.trim(), nome: arquivo, pdf: btoa(bin) });
+        toast(`DANFSe enviado para ${campoEmail.value.trim()}.`, 'ok', 5000); this.desenharLista();
+      } catch (e) { toast(e.message, 'err', 6000); enviar.disabled = false; }
+    };
+    celula.append(campoEmail, enviar, cancelar); campoEmail.focus();
   }
 
   async historico() {

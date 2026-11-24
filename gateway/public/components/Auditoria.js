@@ -35,16 +35,21 @@ export class Auditoria {
     const linhas = lote.res.filter((x) => this.filtro === 'todos' || (this.filtro === 'erro' ? temProblema(x) : !temProblema(x)));
     const sujos = lote.res.filter((x) => x.grupo.sujo).length;
 
-    const filtro = (id, rotulo, n) => el('button', { class: this.filtro === id ? '' : 'sec', 'data-filtro': id, onclick: () => { this.filtro = id; this.aberto = null; this.desenhar(); } }, `${rotulo} (${n})`);
+    const filtro = (id, rotulo, n) => el('button', { class: 'seg-b', type: 'button', 'aria-pressed': String(this.filtro === id), 'data-filtro': id, onclick: () => { this.filtro = id; this.aberto = null; this.desenhar(); } }, rotulo, el('span', { class: 'seg-n' }, String(n)));
+    const pct = t.operacoes ? Math.round((t.ok / t.operacoes) * 100) : 0;
     a.append(el('div', { class: 'card' },
-      el('div', { class: 'totals' },
-        el('div', { class: 'kpi main' }, el('div', { class: 'v' }, dinheiro(t.total)), el('div', { class: 'l' }, 'Total de CBS + IBS das operações sem problema')),
-        el('div', { class: 'kpi' }, el('div', { class: 'v' }, `${t.ok} de ${t.operacoes}`), el('div', { class: 'l' }, 'Validadas'))),
-      el('div', { class: 'row' }, filtro('todos', 'Todos', t.operacoes), filtro('erro', 'Com erro', t.comProblema), filtro('ok', 'Validados', t.ok)),
-      el('div', { class: 'row noprint' },
-        el('button', { id: 'recalc-todos', disabled: !sujos }, `↻ Recalcular todos os corrigidos (${sujos})`),
-        el('button', { class: 'sec', id: 'baixar-planilha' }, '⇩ Planilha corrigida'), el('button', { class: 'sec', id: 'baixar-csv' }, '⇩ Resultado (CSV)'),
-        el('button', { class: 'sec', id: 'ir-relatorio' }, 'Gerar relatório')),
+      el('div', { class: 'totals aud-kpis' },
+        el('div', { class: 'kpi main' }, el('div', { class: 'l' }, 'Total de CBS + IBS'), el('div', { class: 'v' }, dinheiro(t.total)), el('div', { class: 'l' }, 'somando só as operações sem problema')),
+        el('div', { class: 'kpi' }, el('div', { class: 'l' }, 'Validadas'), el('div', { class: 'v' }, `${t.ok} de ${t.operacoes}`),
+          el('div', { class: 'bar', role: 'img', 'aria-label': `${pct}% validadas` }, el('span', { style: `width:${pct}%` }))),
+        el('div', { class: 'kpi' + (t.comProblema ? ' alerta' : '') }, el('div', { class: 'l' }, 'Com erro'), el('div', { class: 'v' }, String(t.comProblema)),
+          el('div', { class: 'l' }, t.comProblema ? 'corrija e recalcule abaixo' : 'nada a corrigir'))),
+      el('div', { class: 'aud-barra noprint' },
+        el('div', { class: 'seg', role: 'group', 'aria-label': 'Filtrar operações' }, filtro('todos', 'Todos', t.operacoes), filtro('erro', 'Com erro', t.comProblema), filtro('ok', 'Validados', t.ok)),
+        el('div', { class: 'aud-acoes' },
+          el('button', { class: 'sec', id: 'recalc-todos', disabled: !sujos, title: sujos ? '' : 'Corrija alguma nota para habilitar' }, `↻ Recalcular corrigidos (${sujos})`),
+          el('button', { class: 'sec', id: 'baixar-planilha' }, '⇩ Planilha'), el('button', { class: 'sec', id: 'baixar-csv' }, '⇩ CSV'),
+          el('button', { id: 'ir-relatorio' }, 'Gerar relatório'))),
       el('div', { id: 'aud-msg', role: 'alert' }),
       lote.cenarioAlt ? el('p', { class: 'mut small' }, 'O comparativo com o Simples Nacional é recalculado junto, com as mesmas alíquotas e atividades informadas no lote.') : null));
 

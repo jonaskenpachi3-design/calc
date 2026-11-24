@@ -1,0 +1,4 @@
+﻿documento;data;tipo_nota;aliquota_cbs;aliquota_ibs;fator_r;ultrapassou_sublimite;tipo;codigo;classificacao;atividade;valor;descricao
+NF-1001;10/03/2027;nfe;1,1612;0,0129;nao;nao;produto;22030000;000001;01;10.000,00;Cerveja
+NF-1002;14/03/2027;nfe;1,1612;0,0129;nao;nao;produto;22030000;000001;01;6.500,00;Cerveja
+NF-1003;20/03/2027;nfe;1,1612;0,0129;nao;nao;produto;22030000;000001;01;8.200,00;Cerveja

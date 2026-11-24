@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- EXEMPLO FICTICIO PARA DEMONSTRACAO. Sem valor fiscal. -->
+<nfeProc xmlns="http://www.portalfiscal.inf.br/nfe">
+  <NFe>
+    <infNFe Id="NFe00000000000000000000000000000000000000000000" versao="4.00">
+      <ide>
+        <cUF>12</cUF>
+        <mod>55</mod>
+        <serie>1</serie>
+        <nNF>9001</nNF>
+        <dhEmi>2027-03-12T10:00:00-05:00</dhEmi>
+        <cMunFG>1200401</cMunFG>
+      </ide>
+      <emit>
+        <xNome>EMPRESA DEMONSTRACAO LTDA</xNome>
+        <enderEmit><xMun>Rio Branco</xMun><UF>AC</UF><cMun>1200401</cMun></enderEmit>
+        <CRT>3</CRT>
+      </emit>
+      <det nItem="1">
+        <prod><cProd>001</cProd><xProd>Carne bovina desossada</xProd><NCM>02013000</NCM><vProd>2450.00</vProd></prod>
+        <imposto><ICMS><ICMS00><vICMS>306.25</vICMS></ICMS00></ICMS><PIS><PISAliq><vPIS>16.17</vPIS></PISAliq></PIS><COFINS><COFINSAliq><vCOFINS>74.48</vCOFINS></COFINSAliq></COFINS></imposto>
+      </det>
+      <det nItem="2">
+        <prod><cProd>002</cProd><xProd>Cerveja (caixas)</xProd><NCM>22030000</NCM><vProd>5800.00</vProd></prod>
+        <imposto><ICMS><ICMS00><vICMS>1044.00</vICMS></ICMS00></ICMS><PIS><PISAliq><vPIS>38.28</vPIS></PISAliq></PIS><COFINS><COFINSAliq><vCOFINS>176.32</vCOFINS></COFINSAliq></COFINS></imposto>
+      </det>
+    </infNFe>
+  </NFe>
+</nfeProc>

@@ -1,0 +1,10 @@
+﻿documento;data;uf;municipio;tipo;codigo;classificacao;valor;descricao;tributos_atuais
+NF-0001;05/03/2027;AC;Rio Branco;servico;122011200;200028;1.200,00;Mensalidade escolar - Ensino fundamental;60,00
+NF-0001;05/03/2027;AC;Rio Branco;servico;122011200;200028;800,00;Material didatico;40,00
+NF-0002;08/03/2027;AC;Rio Branco;produto;02013000;000001;2.450,00;Carne bovina desossada;306,25
+NF-0003;10/03/2027;AC;Rio Branco;produto;22030000;000001;5.800,00;Cerveja (caixas);1.044,00
+NF-0004;12/03/2027;AC;Rio Branco;servico;122011200;200028;1.500,00;Mensalidade escolar;75,00
+NF-0005;15/03/2027;AC;Rio Branco;produto;02013000;000001;3.100,00;Carne bovina desossada;387,50
+NF-0006;18/03/2027;AC;Rio Branco;produto;22030000;000001;7.250,00;Cerveja (caixas);1.305,00
+NF-0007;22/03/2027;AC;Rio Branco;servico;122011200;200028;950,00;Curso livre;47,50
+NF-0008;31/02/2027;AC;Rio Branco;produto;02013000;000001;500,00;Nota com data errada (exemplo de erro);62,50

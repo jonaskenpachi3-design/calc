@@ -273,6 +273,14 @@ Leia antes de vender.
 - **Avulso do DANFSe** (preencher dados sem XML) não existe: o gerador oficial só aceita o XML.
 - **Consulta de CNPJ** no cadastro de empresas usa APIs públicas chamadas direto pelo navegador.
 
+## Colocando no ar: checklist
+
+1. `cp .env.example .env` e preencha `AUTH_SECRET`, `ADMIN_TOKEN` e `PUBLIC_URL`.
+2. **E-mail**: preencha `SMTP_*` e teste com `node --env-file=.env scripts/testar-email.mjs seu@email.com`.
+3. **Cobrança**: crie a conta no sandbox do Asaas, ponha a chave em `ASAAS_API_KEY` e um `ASAAS_WEBHOOK_TOKEN` seu, e teste com `node --env-file=.env scripts/testar-asaas.mjs` (recusa chave de produção sem `--producao`). Cadastre o webhook `PUBLIC_URL/webhooks/asaas` no painel do Asaas com o mesmo token, pague a fatura de teste e confira que o plano mudou.
+4. **Calculadoras reais**: rode `scripts/verificar-integracao.mjs` (seção abaixo).
+5. Defina `PRECO_*` e os limites em `plans.js`, e confirme as `ALIQUOTA_*`.
+
 ## Verificação com as calculadoras oficiais
 
 Os testes automáticos (`npm test`) usam calculadoras falsas. Antes de vender, rode o roteiro que usa as reais:

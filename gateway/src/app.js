@@ -131,6 +131,7 @@ export function criarApp(config, db) {
 
   function limitarTaxa(tenantId) {
     const minuto = Math.floor(Date.now() / 60000);
+    if (janelas.size > 1000) for (const [k, v] of janelas) if (v.minuto !== minuto) janelas.delete(k);
     const j = janelas.get(tenantId);
     if (!j || j.minuto !== minuto) {
       janelas.set(tenantId, { minuto, contagem: 1 });
